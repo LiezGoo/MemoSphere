@@ -1,0 +1,391 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountStatus {
+  ACTIVE
+  DISABLED
+  PENDING
+}
+
+enum DiaryEntryStatus {
+  DRAFT
+  PRESERVED
+  ARCHIVED
+  DELETED
+}
+
+enum WritingMode {
+  VERBATIM
+  LIGHT_FIX
+  REVIEW
+}
+
+enum BeneficiaryStatus {
+  INVITED
+  REGISTERED
+  VERIFIED
+  SUSPENDED
+  REMOVED
+}
+
+enum PolicyStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+  FROZEN
+  INVALID
+}
+
+enum PolicyCompilationStatus {
+  NOT_COMPILED
+  VALID
+  INVALID
+}
+
+enum GrantStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+}
+
+enum AccessResult {
+  ALLOWED
+  DENIED
+}
+
+enum MediaType {
+  PHOTO
+  AUDIO
+  VIDEO
+  MUSIC
+  VOICE_MESSAGE
+}
+
+enum AIMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model User {
+  id            String        @id @default(cuid())
+  fullName      String        @db.VarChar(100)
+  email         String        @unique @db.VarChar(255)
+  passwordHash  String        @db.VarChar(255)
+  accountStatus AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  owner         Owner?
+  sessions      AuthSession[]
+
+  @@index([accountStatus])
+  @@map("users")
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique @db.VarChar(64)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model Owner {
+  id            String           @id @default(cuid())
+  userId        String           @unique
+  displayName   String           @db.VarChar(100)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  diaryEntries  DiaryEntry[]
+  beneficiaries Beneficiary[]
+  vault         Vault?
+  protocols     Protocol[]
+  grants        Grant[]
+  policies      AccessPolicy[]
+  wishes        LetterOfWishes?
+  conversations AIConversation[]
+  auditLogs     AccessAuditLog[]
+
+  @@map("owners")
+}
+
+model DiaryEntry {
+  id                String            @id @default(cuid())
+  ownerId           String
+  title             String            @db.VarChar(200)
+  category          String            @db.VarChar(80)
+  originalContent   String            @db.LongText
+  normalizedContent String?           @db.LongText
+  entryDate         DateTime
+  status            DiaryEntryStatus  @default(DRAFT)
+  previousHash      String?           @db.VarChar(128)
+  contentHash       String            @db.VarChar(128)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+  owner             Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  versions          EntryVersion[]
+  media             MediaAsset[]
+  tags              EntryTag[]
+  sourceCitations   AIMessageSource[]
+
+  @@index([ownerId, entryDate])
+  @@index([ownerId, status])
+  @@map("diary_entries")
+}
+
+model EntryVersion {
+  id               String      @id @default(cuid())
+  diaryEntryId     String
+  versionNumber    Int
+  writingMode      WritingMode
+  sourceContent    String      @db.LongText
+  processedContent String?     @db.LongText
+  processingNotes  String?     @db.Text
+  createdAt        DateTime    @default(now())
+  diaryEntry       DiaryEntry  @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([diaryEntryId, versionNumber])
+  @@index([diaryEntryId, createdAt])
+  @@map("entry_versions")
+}
+
+model Tag {
+  id        String     @id @default(cuid())
+  name      String     @unique @db.VarChar(50)
+  createdAt DateTime   @default(now())
+  entries   EntryTag[]
+
+  @@map("tags")
+}
+
+model EntryTag {
+  diaryEntryId String
+  tagId        String
+  diaryEntry   DiaryEntry @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
+  tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([diaryEntryId, tagId])
+  @@map("entry_tags")
+}
+
+model MediaAsset {
+  id           String     @id @default(cuid())
+  diaryEntryId String
+  mediaType    MediaType
+  fileName     String     @db.VarChar(255)
+  storageKey   String     @unique @db.VarChar(512)
+  mimeType     String     @db.VarChar(120)
+  byteSize     BigInt
+  createdAt    DateTime   @default(now())
+  diaryEntry   DiaryEntry @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
+
+  @@index([diaryEntryId, mediaType])
+  @@map("media_assets")
+}
+
+model Beneficiary {
+  id            String            @id @default(cuid())
+  ownerId       String
+  fullName      String            @db.VarChar(100)
+  email         String            @db.VarChar(255)
+  relationship  String            @db.VarChar(80)
+  status        BeneficiaryStatus @default(INVITED)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  owner         Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  policies      AccessPolicy[]
+  grants        Grant[]
+  conversations AIConversation[]
+  auditLogs     AccessAuditLog[]
+
+  @@unique([ownerId, email])
+  @@index([ownerId, status])
+  @@map("beneficiaries")
+}
+
+model Vault {
+  id        String   @id @default(cuid())
+  ownerId   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("vaults")
+}
+
+model Protocol {
+  id          String   @id @default(cuid())
+  ownerId     String
+  name        String   @db.VarChar(150)
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  owner       Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@map("protocols")
+}
+
+model AccessPolicy {
+  id                String                  @id @default(cuid())
+  ownerId           String
+  beneficiaryId     String
+  name              String                  @db.VarChar(150)
+  description       String?                 @db.Text
+  sourceCode        String                  @db.LongText
+  compiledFacts     String?                 @db.LongText
+  compilationStatus PolicyCompilationStatus @default(NOT_COMPILED)
+  validationErrors  Json?
+  status            PolicyStatus            @default(DRAFT)
+  currentVersion    Int                     @default(1)
+  releaseAt         DateTime?
+  frozenAt          DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  owner             Owner                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  beneficiary       Beneficiary             @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  versions          PolicyVersion[]
+  rules             PolicyRule[]
+  grants            Grant[]
+
+  @@index([ownerId, status])
+  @@index([beneficiaryId, status])
+  @@map("access_policies")
+}
+
+model PolicyVersion {
+  id                String                  @id @default(cuid())
+  policyId          String
+  versionNumber     Int
+  sourceCode        String                  @db.LongText
+  compiledFacts     String?                 @db.LongText
+  compilationStatus PolicyCompilationStatus @default(NOT_COMPILED)
+  validationErrors  Json?
+  frozenAt          DateTime?
+  createdAt         DateTime                @default(now())
+  policy            AccessPolicy            @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, versionNumber])
+  @@map("policy_versions")
+}
+
+model PolicyRule {
+  id             String       @id @default(cuid())
+  policyId       String
+  resourceType   String       @db.VarChar(80)
+  resourceId     String?      @db.VarChar(100)
+  allowedActions Json
+  conditions     Json?
+  createdAt      DateTime     @default(now())
+  policy         AccessPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId, resourceType])
+  @@map("policy_rules")
+}
+
+model Grant {
+  id             String        @id @default(cuid())
+  ownerId        String
+  beneficiaryId  String
+  policyId       String?
+  status         GrantStatus   @default(ACTIVE)
+  allowedActions Json
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  owner          Owner         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  beneficiary    Beneficiary   @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  policy         AccessPolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, status])
+  @@index([beneficiaryId, status])
+  @@map("grants")
+}
+
+model LetterOfWishes {
+  id        String   @id @default(cuid())
+  ownerId   String   @unique
+  title     String   @db.VarChar(200)
+  content   String   @db.LongText
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("letters_of_wishes")
+}
+
+model AIConversation {
+  id            String       @id @default(cuid())
+  ownerId       String
+  beneficiaryId String?
+  title         String?      @db.VarChar(200)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  owner         Owner        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  beneficiary   Beneficiary? @relation(fields: [beneficiaryId], references: [id], onDelete: SetNull)
+  messages      AIMessage[]
+
+  @@index([ownerId, updatedAt])
+  @@index([beneficiaryId, updatedAt])
+  @@map("ai_conversations")
+}
+
+model AIMessage {
+  id             String            @id @default(cuid())
+  conversationId String
+  role           AIMessageRole
+  content        String            @db.LongText
+  createdAt      DateTime          @default(now())
+  conversation   AIConversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sources        AIMessageSource[]
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+model AIMessageSource {
+  id           String     @id @default(cuid())
+  messageId    String
+  diaryEntryId String
+  citationText String?    @db.Text
+  createdAt    DateTime   @default(now())
+  message      AIMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  diaryEntry   DiaryEntry @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, diaryEntryId])
+  @@map("ai_message_sources")
+}
+
+model AccessAuditLog {
+  id            String       @id @default(cuid())
+  ownerId       String
+  actorUserId   String?
+  beneficiaryId String?
+  action        String       @db.VarChar(100)
+  resourceType  String       @db.VarChar(80)
+  resourceId    String?      @db.VarChar(100)
+  result        AccessResult
+  metadata      Json?
+  createdAt     DateTime     @default(now())
+  owner         Owner        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  beneficiary   Beneficiary? @relation(fields: [beneficiaryId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, createdAt])
+  @@index([beneficiaryId, createdAt])
+  @@index([action, result])
+  @@map("access_audit_logs")
+}

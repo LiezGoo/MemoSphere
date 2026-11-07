@@ -1,0 +1,3 @@
+# Migration Review
+
+Migration `20261104133950_init_database` creates the reviewed initial Alaala schema, including `User` and `AuthSession`, diary records, processing revisions, beneficiaries, policies, media metadata, AI citations, wishes, and audit logs. It was applied to the empty development database after inspection. Do not run a reset or destructive migration against an existing diary database.
