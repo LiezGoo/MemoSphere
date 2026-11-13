@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, CircleUserRound, Search, X } from 'lucide-react';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
@@ -61,15 +62,15 @@ export default function AppHeader({ sidebarCollapsed, mobileOpen, onMenuToggle }
           aria-controls="app-sidebar"
           onClick={onMenuToggle}
         >
-          <img
-            src="/images/logo.png"
-            alt=""
+          <Image
+            src="/images/logoo.png"
+            alt="Alaala Logo"
             width={36}
             height={36}
             className="app-header-logo-image"
           />
         </button>
-        <strong className="app-header-title">MMK</strong>
+        <strong className="app-header-title">MemoSphere</strong>
       </div>
       <form className={`app-header-search ${mobileSearchOpen ? 'is-mobile-open' : ''}`} role="search" onSubmit={submit}>
         <label className="sr-only" htmlFor="memory-search">Search your memories</label>
