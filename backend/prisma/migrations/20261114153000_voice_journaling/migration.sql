@@ -1,0 +1,3 @@
+ALTER TABLE `diary_entries`
+  ADD COLUMN `transcript` LONGTEXT NULL,
+  ADD COLUMN `inputMethod` ENUM('TEXT', 'VOICE') NOT NULL DEFAULT 'TEXT';

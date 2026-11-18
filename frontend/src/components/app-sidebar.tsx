@@ -1,8 +1,8 @@
 'use client';
 
 import {
-  BookOpen, Clock3, HeartHandshake, LayoutDashboard, MessageCircleHeart,
-  LogOut, Settings, ShieldCheck,
+  Activity, BookOpen, HeartHandshake, LayoutDashboard,
+  PenLine, ShieldCheck, UsersRound,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ComponentType, type FocusEvent, type PointerEvent } from 'react';
@@ -12,7 +12,6 @@ type AppSidebarProps = {
   collapsed: boolean;
   open: boolean;
   onClose: () => void;
-  onLogout: () => void;
 };
 
 type NavigationItem = {
@@ -21,23 +20,26 @@ type NavigationItem = {
   icon: ComponentType<{ size?: number; strokeWidth?: number }>;
 };
 
-const navigation: NavigationItem[] = [
-  { label: 'Home', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'My Diary', href: '/my-diary', icon: BookOpen },
-  { label: 'Memory Timeline', href: '/activity-logs', icon: Clock3 },
-  { label: 'Ask My Memories', href: '/ai-diary', icon: MessageCircleHeart },
-  { label: 'Letters to my Future Self', href: '/letter-of-wishes', icon: HeartHandshake },
-  { label: 'Legacy and Inheritance', href: '/legacy-policy', icon: ShieldCheck },
-  { label: 'Settings', href: '/settings', icon: Settings },
+const sections: { label: string; items: NavigationItem[] }[] = [
+  { label: 'Main menu', items: [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'My Diary', href: '/my-diary', icon: BookOpen },
+    { label: 'Writing Modes', href: '/writing-modes', icon: PenLine },
+  ] },
+  { label: 'Personal management', items: [
+    { label: 'Beneficiaries', href: '/beneficiaries', icon: UsersRound },
+    { label: 'Access Policies', href: '/legacy-policy', icon: ShieldCheck },
+    { label: 'Letter of Wishes', href: '/letter-of-wishes', icon: HeartHandshake },
+  ] },
+  { label: 'System', items: [
+    { label: 'Activity Logs', href: '/activity-logs', icon: Activity },
+  ] },
 ];
 
-export default function AppSidebar({ collapsed, open, onClose, onLogout }: AppSidebarProps) {
+export default function AppSidebar({ collapsed, open, onClose }: AppSidebarProps) {
   const pathname = usePathname();
   const [tooltip, setTooltip] = useState<{ label: string; top: number; left: number } | null>(null);
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const primaryNavigation = navigation.slice(0, 5);
-  const secondaryNavigation = navigation.slice(5, 6);
-  const settings = navigation[6];
 
   const hideTooltip = () => {
     if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
@@ -50,18 +52,12 @@ export default function AppSidebar({ collapsed, open, onClose, onLogout }: AppSi
     if (!collapsed) return;
     tooltipTimer.current = setTimeout(() => {
       const bounds = target.getBoundingClientRect();
-      setTooltip({
-        label,
-        left: bounds.right + 10,
-        top: Math.max(10, Math.min(bounds.top + bounds.height / 2, window.innerHeight - 24)),
-      });
+      setTooltip({ label, left: bounds.right + 10, top: Math.max(10, Math.min(bounds.top + bounds.height / 2, window.innerHeight - 24)) });
     }, 350);
   };
 
   useEffect(() => hideTooltip, [collapsed, open]);
-  useEffect(() => () => {
-    if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
-  }, []);
+  useEffect(() => () => { if (tooltipTimer.current) clearTimeout(tooltipTimer.current); }, []);
 
   const tooltipHandlers = (label: string) => ({
     onPointerEnter: (event: PointerEvent<HTMLElement>) => showTooltip(label, event.currentTarget),
@@ -70,31 +66,25 @@ export default function AppSidebar({ collapsed, open, onClose, onLogout }: AppSi
     onBlur: hideTooltip,
   });
 
+  const active = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+
   return (
-    <nav
-      id="app-sidebar"
-      className={`app-sidebar ${collapsed ? 'is-collapsed' : ''} ${open ? 'is-open' : ''}`}
-      aria-label="Main"
-    >
+    <nav id="app-sidebar" className={`app-sidebar ${collapsed ? 'is-collapsed' : ''} ${open ? 'is-open' : ''}`} aria-label="Main">
       <div className="app-sidebar-scroll">
-        <div className="app-sidebar-links">
-          {[...primaryNavigation, ...secondaryNavigation].map(({ label, href, icon: Icon }) => {
-            const active = pathname === href;
-            return <a key={href} className={`app-sidebar-link ${active ? 'is-active' : ''}`} href={href} aria-current={active ? 'page' : undefined} aria-describedby={collapsed && tooltip?.label === label ? 'app-sidebar-tooltip' : undefined} onClick={onClose} {...tooltipHandlers(label)}><Icon size={21} strokeWidth={1.9} /><span>{label}</span></a>;
-          })}
-        </div>
-      </div>
-      <div className="app-sidebar-footer">
-        <a className={`app-sidebar-link ${pathname === settings.href ? 'is-active' : ''}`} href={settings.href} aria-current={pathname === settings.href ? 'page' : undefined} aria-describedby={collapsed && tooltip?.label === settings.label ? 'app-sidebar-tooltip' : undefined} onClick={onClose} {...tooltipHandlers(settings.label)}><Settings size={21} strokeWidth={1.9} /><span>{settings.label}</span></a>
-        <button className="app-sidebar-logout" type="button" aria-describedby={collapsed && tooltip?.label === 'Sign out' ? 'app-sidebar-tooltip' : undefined} onClick={onLogout} {...tooltipHandlers('Sign out')}>
-          <LogOut size={21} strokeWidth={1.9} />
-          <span>Sign out</span>
-        </button>
+        {sections.map((section) => (
+          <section className="app-sidebar-section" key={section.label} aria-label={section.label}>
+            <h2 className="app-sidebar-section-heading">{section.label}</h2>
+            <div className="app-sidebar-links">
+              {section.items.map(({ label, href, icon: Icon }) => {
+                const isActive = active(href);
+                return <a key={href} className={`app-sidebar-link ${isActive ? 'is-active' : ''}`} href={href} aria-current={isActive ? 'page' : undefined} aria-label={collapsed ? label : undefined} aria-describedby={collapsed && tooltip?.label === label ? 'app-sidebar-tooltip' : undefined} onClick={onClose} {...tooltipHandlers(label)}><Icon size={21} strokeWidth={1.9} /><span>{label}</span></a>;
+              })}
+            </div>
+          </section>
+        ))}
       </div>
       {tooltip && collapsed && typeof document !== 'undefined' && createPortal(
-        <div id="app-sidebar-tooltip" className="app-sidebar-tooltip" role="tooltip" style={{ left: tooltip.left, top: tooltip.top }}>
-          {tooltip.label}
-        </div>,
+        <div id="app-sidebar-tooltip" className="app-sidebar-tooltip" role="tooltip" style={{ left: tooltip.left, top: tooltip.top }}>{tooltip.label}</div>,
         document.body,
       )}
     </nav>

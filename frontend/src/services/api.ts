@@ -4,26 +4,62 @@ import type { AuthUser } from '@/components/auth-provider';
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly requestId?: string) {
     super(message);
   }
 }
 
 export type AuthMeResponse = { success: true; data: { user: AuthUser } };
+export type Beneficiary = {
+  id: string;
+  fullName: string;
+  email: string;
+  relationship: string;
+  status: string;
+};
+export type AccessPolicy = {
+  id: string;
+  name: string;
+  status: string;
+  sourceCode: string;
+  beneficiary: { id: string; fullName: string; email: string };
+};
+export type ActivityLog = {
+  id: string;
+  action: string;
+  resourceType: string;
+  result: string;
+  createdAt: string;
+};
+export type AssistantCitation = { id: string; title: string; entryDate: string };
+export type AssistantReply = {
+  conversationId: string;
+  message: { id: string; role: 'ASSISTANT'; content: string; citations: AssistantCitation[] };
+};
+export type NotificationItem = { id: string; type: 'COUNTDOWN' | 'REMINDER' | 'REVISION_READY' | 'SECURITY' | 'SYSTEM'; title: string; body: string; link: string | null; isRead: boolean; readAt: string | null; createdAt: string };
+export type Profile = { id: string; fullName: string; email: string; bio: string | null; avatarUrl: string | null; timezone: string; notificationPreferences: { countdown: boolean; reminder: boolean; revision_ready: boolean; system: boolean }; createdAt: string; updatedAt: string };
+export type LegacyBeneficiary = { id: string; fullName: string; email: string; relationship: string | null; status: string; verifiedAt?: string | null; createdAt?: string };
+export type LegacyPolicy = { id: string; name: string; description: string | null; status: string; beneficiaryId: string; beneficiary: LegacyBeneficiary; scopeType: string; scopeCategories: string[] | null; scopeDateFrom: string | null; scopeDateTo: string | null; excludedEntryIds: string[]; entryLinks: { entryId: string }[]; releaseMethod: string; releaseAt: string | null; coolingOffDays: number; expiresAt: string | null; releaseReadyAt: string | null };
 
 export async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers = new Headers(options?.headers);
+  if (!(typeof FormData !== 'undefined' && options?.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers,
   });
 
   if (!response.ok) {
-    const payload = await response.json().catch(() => undefined) as { error?: { message?: string } } | undefined;
+    const payload = await response.json().catch(() => undefined) as { error?: { message?: string; requestId?: string } } | undefined;
     if (response.status === 401 && typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
       window.location.replace('/login');
     }
-    throw new ApiError(response.status, payload?.error?.message ?? `Request failed with status ${response.status}`);
+    const requestId = payload?.error?.requestId;
+    const message = payload?.error?.message ?? `Request failed with status ${response.status}`;
+    throw new ApiError(response.status, response.status === 500 && requestId ? `${message} Reference: ${requestId}` : message, requestId);
   }
 
   if (response.status === 204) return undefined as T;
@@ -35,6 +71,15 @@ export const authService = {
   register: (payload: unknown) => apiRequest('/api/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   logout: () => apiRequest('/api/auth/logout', { method: 'POST' }),
   me: () => apiRequest<AuthMeResponse>('/api/auth/me'),
+};
+
+export type FaceChallenge = { challengeId: string; nonce: string; expiresAt: string };
+export const faceAuthService = {
+  challenge: (email: string) => apiRequest<{ success: true; data: FaceChallenge }>('/api/auth/face/challenge', { method: 'POST', body: JSON.stringify({ email }) }).then((result) => result.data),
+  verify: (payload: { challengeId: string; nonce: string; descriptor: number[] }) => apiRequest<AuthMeResponse>('/api/auth/face/verify', { method: 'POST', body: JSON.stringify(payload) }),
+  status: () => apiRequest<{ success: true; data: { enabled: boolean; consentAt: string | null } }>('/api/auth/face/status').then((result) => result.data),
+  enroll: (payload: { password: string; descriptor: number[] }) => apiRequest<{ success: true; data: { enabled: boolean } }>('/api/auth/face/enroll', { method: 'POST', body: JSON.stringify(payload) }),
+  remove: (password: string) => apiRequest<{ success: true; data: { enabled: boolean } }>('/api/auth/face/enroll', { method: 'DELETE', body: JSON.stringify({ password }) }),
 };
 
 export const diaryService = {
@@ -50,36 +95,91 @@ export const dashboardService = {
 };
 
 export const assistantService = {
-  ask: (payload: unknown) => apiRequest('/api/ai/conversations/messages', { method: 'POST', body: JSON.stringify(payload) }),
+  ask: (payload: { conversationId?: string; question: string }) => apiRequest<{ success: true; data: AssistantReply }>('/api/ai/conversations/messages', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
 };
 
 export const beneficiaryService = {
-  list: () => apiRequest('/api/beneficiaries'),
+  list: () => apiRequest<{ success: true; data: { beneficiaries: Beneficiary[] } }>('/api/beneficiaries').then((result) => result.data),
   create: (payload: unknown) => apiRequest('/api/beneficiaries', { method: 'POST', body: JSON.stringify(payload) }),
   remove: (id: string) => apiRequest(`/api/beneficiaries/${id}`, { method: 'DELETE' }),
 };
 
 export const policyService = {
-  list: () => apiRequest('/api/policies'),
+  list: () => apiRequest<{ success: true; data: { policies: AccessPolicy[] } }>('/api/policies').then((result) => result.data),
   validate: (policy: string) => apiRequest('/api/policies/validate', { method: 'POST', body: JSON.stringify({ policy }) }),
   create: (payload: unknown) => apiRequest('/api/policies', { method: 'POST', body: JSON.stringify(payload) }),
 };
 
+export const legacyPolicyService = {
+  listBeneficiaries: () => apiRequest<{ success: true; data: { beneficiaries: LegacyBeneficiary[] } }>('/api/legacy/beneficiaries').then((r) => r.data.beneficiaries),
+  createBeneficiary: (payload: unknown) => apiRequest<{ success: true; data: { beneficiary: LegacyBeneficiary; delivery: string } }>('/api/legacy/beneficiaries', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data),
+  list: () => apiRequest<{ success: true; data: { policies: LegacyPolicy[] } }>('/api/legacy/policies').then((r) => r.data.policies),
+  create: (payload: unknown) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>('/api/legacy/policies', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data.policy),
+  update: (id: string, payload: unknown) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }).then((r) => r.data.policy),
+  activate: (id: string, password: string) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}/activate`, { method: 'POST', body: JSON.stringify({ password }) }).then((r) => r.data.policy),
+  pause: (id: string) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}/pause`, { method: 'POST' }).then((r) => r.data.policy),
+  revoke: (id: string, password: string) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}/revoke`, { method: 'POST', body: JSON.stringify({ password }) }).then((r) => r.data.policy),
+  requestRelease: (id: string, password?: string) => apiRequest<{ success: true; data: { policy?: LegacyPolicy; message?: string } }>(`/api/legacy/policies/${id}/release-request`, { method: 'POST', body: JSON.stringify(password ? { password } : {}) }).then((r) => r.data),
+  cancelRelease: (id: string) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}/release-cancel`, { method: 'POST' }).then((r) => r.data.policy),
+  remove: (id: string) => apiRequest<void>(`/api/legacy/policies/${id}`, { method: 'DELETE' }),
+  audit: (id: string) => apiRequest<{ success: true; data: { logs: { id: string; action: string; actorType: string; createdAt: string; metadata: unknown }[] } }>(`/api/legacy/audit?policy_id=${encodeURIComponent(id)}`).then((r) => r.data.logs),
+};
+
 export const writingModeService = {
-  process: (payload: unknown) => apiRequest('/api/diary/writing-modes/process', { method: 'POST', body: JSON.stringify(payload) }),
+  process: (payload: { diaryEntryId?: string; mode: 'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'; content: string }) => apiRequest<{ success: true; data: { version: { processedContent: string; processingNotes: string | null }; persisted?: boolean } }>('/api/diary/writing-modes/process', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
+};
+
+export const transcriptionService = {
+  transcribe: (audio: Blob, durationMs: number, signal?: AbortSignal) => {
+    const formData = new FormData();
+    const extension = audio.type.includes('mp4') ? 'm4a' : audio.type.includes('mpeg') ? 'mp3' : 'webm';
+    formData.append('audio', audio, `voice-entry.${extension}`);
+    formData.append('durationMs', String(Math.round(durationMs)));
+    return apiRequest<{ success: true; data: { transcription: string; durationSeconds: number } }>('/api/transcribe', { method: 'POST', body: formData, signal }).then((result) => result.data);
+  },
+};
+
+export const notificationsService = {
+  list: (limit = 20) => apiRequest<{ success: true; data: { notifications: NotificationItem[]; nextCursor: string | null } }>(`/api/notifications?limit=${limit}`).then((result) => result.data),
+  unreadCount: () => apiRequest<{ success: true; data: { count: number } }>('/api/notifications/unread-count').then((result) => result.data.count),
+  markRead: (id: string) => apiRequest<{ success: true; data: { notification: NotificationItem } }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' }).then((result) => result.data.notification),
+  markAllRead: () => apiRequest<{ success: true; data: { updated: number } }>('/api/notifications/read-all', { method: 'POST' }).then((result) => result.data.updated),
+};
+
+export const profileService = {
+  get: () => apiRequest<{ success: true; data: { profile: Profile } }>('/api/profile').then((result) => result.data.profile),
+  update: (payload: { displayName?: string; bio?: string; timezone?: string; notificationPreferences?: Partial<Profile['notificationPreferences']> }) => apiRequest<{ success: true; data: { profile: Profile } }>('/api/profile', { method: 'PATCH', body: JSON.stringify(payload) }).then((result) => result.data.profile),
+  uploadAvatar: (avatar: File) => { const form = new FormData(); form.append('avatar', avatar); return apiRequest<{ success: true; data: { profile: Pick<Profile, 'id' | 'fullName' | 'email' | 'avatarUrl'> } }>('/api/profile/avatar', { method: 'POST', body: form }).then((result) => result.data.profile); },
+  changePassword: (payload: { currentPassword: string; newPassword: string }) => apiRequest<{ success: true; data: { message: string } }>('/api/profile/change-password', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteAccount: (payload: { confirmation: 'DELETE MY ACCOUNT'; currentPassword: string }) => apiRequest<{ success: true; data: { message: string } }>('/api/profile', { method: 'DELETE', body: JSON.stringify(payload) }),
+};
+
+export type LifeCountdown = {
+  id: string;
+  durationDays: number;
+  startDate: string;
+  expirationDate: string;
+  status: 'ACTIVE' | 'COMPLETED';
+  createdAt: string;
+  updatedAt: string;
+};
+type LifeCountdownResponse = { success: true; data: { countdown: LifeCountdown | null; serverNow: string } };
+export const lifeCountdownService = {
+  get: () => apiRequest<LifeCountdownResponse>('/api/life-countdown').then((result) => result.data),
+  configure: (payload: { durationDays: number; startDate: string }, reset = false) => apiRequest<{ success: true; data: { countdown: LifeCountdown; serverNow: string } }>(reset ? '/api/life-countdown/reset' : '/api/life-countdown', { method: reset ? 'POST' : 'PATCH', body: JSON.stringify(payload) }).then((result) => result.data),
 };
 
 export const wishesService = {
-  get: () => apiRequest('/api/letter-of-wishes'),
-  save: (payload: unknown) => apiRequest('/api/letter-of-wishes', { method: 'PUT', body: JSON.stringify(payload) }),
+  get: () => apiRequest<{ success: true; data: { wishes: { title: string; content: string } | null } }>('/api/letter-of-wishes').then((result) => result.data),
+  save: (payload: unknown) => apiRequest<{ success: true; data: { wishes: { title: string; content: string } } }>('/api/letter-of-wishes', { method: 'PUT', body: JSON.stringify(payload) }).then((result) => result.data),
 };
 
 export const activityService = {
-  list: (query = '') => apiRequest(`/api/activity-logs${query}`),
+  list: (query = '') => apiRequest<{ success: true; data: { activities: ActivityLog[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } } }>(`/api/activity-logs${query}`).then((result) => result.data),
 };
 
 export const settingsService = {
-  getProfile: () => apiRequest('/api/settings/profile'),
-  updateProfile: (payload: unknown) => apiRequest('/api/settings/profile', { method: 'PATCH', body: JSON.stringify(payload) }),
+  getProfile: () => apiRequest<{ success: true; data: { user: AuthUser } }>('/api/settings/profile').then((result) => result.data),
+  updateProfile: (payload: unknown) => apiRequest<{ success: true; data: { user: AuthUser } }>('/api/settings/profile', { method: 'PATCH', body: JSON.stringify(payload) }).then((result) => result.data),
   updatePreferences: (payload: unknown) => apiRequest('/api/settings/preferences', { method: 'PATCH', body: JSON.stringify(payload) }),
 };

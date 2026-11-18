@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const protectedPaths = ['/dashboard', '/my-diary', '/ai-diary', '/writing-modes', '/beneficiaries', '/legacy-policy', '/letter-of-wishes', '/activity-logs', '/settings', '/vault', '/saved-information'];
+const protectedPaths = ['/dashboard', '/my-diary', '/ai-diary', '/writing-modes', '/beneficiaries', '/legacy-policy', '/letter-of-wishes', '/activity-logs', '/settings', '/profile', '/vault', '/saved-information'];
 const apiBaseUrl = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
 function isProtectedPath(pathname: string): boolean {
@@ -27,5 +27,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/my-diary/:path*', '/ai-diary/:path*', '/writing-modes/:path*', '/beneficiaries/:path*', '/legacy-policy/:path*', '/letter-of-wishes/:path*', '/activity-logs/:path*', '/settings/:path*', '/vault/:path*', '/saved-information/:path*'],
+  matcher: ['/dashboard/:path*', '/my-diary/:path*', '/ai-diary/:path*', '/writing-modes/:path*', '/beneficiaries/:path*', '/legacy-policy/:path*', '/letter-of-wishes/:path*', '/activity-logs/:path*', '/settings/:path*', '/profile/:path*', '/vault/:path*', '/saved-information/:path*'],
 };

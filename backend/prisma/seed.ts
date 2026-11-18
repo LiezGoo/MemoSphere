@@ -39,8 +39,21 @@ async function main() {
 
 	const beneficiary = await prisma.beneficiary.upsert({
 		where: { ownerId_email: { ownerId: owner.id, email: 'mara.demo@example.test' } },
-		update: {},
-		create: { ownerId: owner.id, fullName: 'Mara Santos', email: 'mara.demo@example.test', relationship: 'Daughter', status: 'VERIFIED' },
+		update: { status: 'VERIFIED', verifiedAt: new Date() },
+		create: { ownerId: owner.id, fullName: 'Mara Santos', email: 'mara.demo@example.test', relationship: 'Daughter', status: 'VERIFIED', verifiedAt: new Date() },
+	});
+	const legacyDraft = await prisma.legacyPolicy.findFirst({ where: { ownerId: owner.id, name: 'Reflections for Mara' } }) ?? await prisma.legacyPolicy.create({
+		data: {
+			ownerId: owner.id,
+			beneficiaryId: beneficiary.id,
+			name: 'Reflections for Mara',
+			description: 'Fictional development draft for testing access-policy setup.',
+			scopeType: 'categories',
+			scopeCategories: ['Reflections'],
+			excludedEntryIds: [],
+			releaseMethod: 'owner_manual',
+			coolingOffDays: 7,
+		},
 	});
 
 	const policy = await prisma.accessPolicy.findFirst({ where: { ownerId: owner.id, name: 'Family memories' } }) ?? await prisma.accessPolicy.create({
@@ -60,7 +73,12 @@ async function main() {
 	});
 
 	await prisma.letterOfWishes.upsert({ where: { ownerId: owner.id }, update: {}, create: { ownerId: owner.id, title: 'A letter for the people I love', content: 'This fictional development letter is a personal guide, not a legally binding will.' } });
-	console.log(`Seeded fictional Alaala data for ${user.email} with policy ${policy.name}.`);
+	await prisma.notification.createMany({ data: [
+		{ userId: user.id, type: 'SYSTEM', title: 'Welcome to MemoSphere', body: 'Your private diary space is ready when you are.', link: '/dashboard', dedupeKey: `seed-welcome:${user.id}` },
+		{ userId: user.id, type: 'COUNTDOWN', title: 'A moment to reflect', body: 'Configure a personal countdown if it is meaningful to you. It is not a prediction or medical assessment.', link: '/dashboard', dedupeKey: `seed-countdown:${user.id}` },
+		{ userId: user.id, type: 'REVISION_READY', title: 'Writing modes are ready', body: 'Preview a writing mode and review it before deciding whether to save.', link: '/writing-modes', dedupeKey: `seed-writing:${user.id}` },
+	], skipDuplicates: true });
+	console.log(`Seeded fictional Alaala data for ${user.email} with policy ${policy.name} and draft legacy policy ${legacyDraft.name}.`);
 }
 
 main().catch((error) => {

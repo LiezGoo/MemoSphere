@@ -1,4 +1,4 @@
-import { ConflictError, UnauthorizedError } from '../../exceptions/index.js';
+import { AccountLockedError, ConflictError, UnauthorizedError } from '../../exceptions/index.js';
 import { createSessionToken, hashSessionToken, sessionDurationMs } from '../../utils/cookies.js';
 import { hashPassword, verifyPassword } from '../../utils/password.js';
 import type { AuthRepository } from './auth.repository.js';
@@ -26,7 +26,8 @@ export function createAuthService(repository: AuthRepository, now: () => Date = 
 
     async login(input: LoginInput): Promise<AuthResult> {
       const user = await repository.findUserByEmail(input.email);
-      if (!user || user.accountStatus !== 'ACTIVE' || !(await verifyPassword(input.password, user.passwordHash))) throw new UnauthorizedError();
+      if (!user || !(await verifyPassword(input.password, user.passwordHash))) throw new UnauthorizedError();
+      if (user.accountStatus !== 'ACTIVE') throw new AccountLockedError();
 
       const sessionToken = createSessionToken();
       const expiresAt = new Date(now().getTime() + sessionDurationMs);

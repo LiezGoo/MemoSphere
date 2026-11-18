@@ -36,7 +36,7 @@ export async function createDiaryEntry(userId: string, input: z.infer<typeof dia
   const previous = await findLatestEntry(owner.id);
   const hash = contentHash(previous?.contentHash, input.title, input.originalContent, input.entryDate);
   const entry = await prisma.$transaction(async (transaction) => {
-    const created = await createEntry({ owner: { connect: { id: owner.id } }, title: input.title, category: input.category, originalContent: input.originalContent, entryDate: input.entryDate, contentHash: hash, previousHash: previous?.contentHash, status: 'PRESERVED', versions: { create: { versionNumber: 1, writingMode: 'VERBATIM', sourceContent: input.originalContent, processedContent: input.originalContent } } }, transaction);
+    const created = await createEntry({ owner: { connect: { id: owner.id } }, title: input.title, category: input.category, originalContent: input.originalContent, transcript: input.transcript, inputMethod: input.inputMethod, entryDate: input.entryDate, contentHash: hash, previousHash: previous?.contentHash, status: 'PRESERVED', versions: { create: { versionNumber: 1, writingMode: 'VERBATIM', sourceContent: input.originalContent, processedContent: input.originalContent } } }, transaction);
     await recordAudit({ ownerId: owner.id, actorUserId: userId, action: 'DIARY_ENTRY_CREATED', resourceType: 'DIARY_ENTRY', resourceId: created.id, result: 'ALLOWED' }, transaction);
     return created;
   });

@@ -6,23 +6,22 @@ import AppSidebar from '@/components/app-sidebar';
 
 type AppLayoutProps = {
   children: ReactNode;
-  onLogout: () => void;
 };
 
 const SIDEBAR_STORAGE_KEY = 'alaala-sidebar-collapsed';
 
-export default function AppLayout({ children, onLogout }: AppLayoutProps) {
+export default function AppLayout({ children }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
-    const narrow = window.matchMedia('(max-width: 767px)').matches;
+    const narrow = window.matchMedia('(max-width: 1023px)').matches;
     setCollapsed(stored === null ? narrow : stored === 'true');
 
     const handleResize = () => {
-      const isMobile = window.matchMedia('(max-width: 767px)').matches;
+      const isMobile = window.matchMedia('(max-width: 1023px)').matches;
       if (!isMobile) setMobileOpen(false);
       setMobile(isMobile);
     };
@@ -71,9 +70,11 @@ export default function AppLayout({ children, onLogout }: AppLayoutProps) {
   return (
     <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'sidebar-open' : ''}`}>
       <AppHeader sidebarCollapsed={collapsed} mobileOpen={mobileOpen} onMenuToggle={toggleMenu} />
-      <AppSidebar collapsed={mobile ? false : collapsed} open={mobileOpen || !mobile} onClose={() => setMobileOpen(false)} onLogout={onLogout} />
-      {mobileOpen && <button className="app-sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-      <main className="app-layout-content">{children}</main>
+      <div className="app-layout-body">
+        <AppSidebar collapsed={mobile ? false : collapsed} open={mobileOpen || !mobile} onClose={() => setMobileOpen(false)} />
+        {mobileOpen && <button className="app-sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
+        <main className="app-layout-content">{children}</main>
+      </div>
     </div>
   );
 }

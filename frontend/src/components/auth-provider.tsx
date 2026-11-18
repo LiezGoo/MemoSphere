@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { ApiError, authService } from '@/services/api';
+import FloatingAssistant from '@/components/floating-assistant';
 
 export type AuthUser = { id: string; fullName: string; email: string; accountStatus: string; createdAt: string };
 type AuthContextValue = { user: AuthUser | null; isLoading: boolean };
@@ -23,7 +24,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   if (isLoading || !user) return <div className="auth-loading" aria-live="polite">Checking your secure session...</div>;
-  return <AuthContext.Provider value={{ user, isLoading }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, isLoading }}>{children}<FloatingAssistant /></AuthContext.Provider>;
 }
 
 export function useAuth() {

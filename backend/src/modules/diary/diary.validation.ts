@@ -17,6 +17,11 @@ export const diaryCreateSchema = z.object({
   category: z.string().trim().min(1).max(80),
   originalContent: z.string().min(1).max(100000),
   entryDate: dateValue,
+  inputMethod: z.enum(['TEXT', 'VOICE']).default('TEXT'),
+  transcript: z.string().max(100000).optional(),
+}).refine((value) => value.inputMethod !== 'VOICE' || Boolean(value.transcript?.trim()), {
+  message: 'Voice entries must include the original transcription.',
+  path: ['transcript'],
 });
 
 export const diaryUpdateSchema = z.object({

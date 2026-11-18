@@ -13,11 +13,29 @@ enum AccountStatus {
   PENDING
 }
 
+enum LifeCountdownStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum NotificationType {
+  COUNTDOWN
+  REMINDER
+  REVISION_READY
+  SECURITY
+  SYSTEM
+}
+
 enum DiaryEntryStatus {
   DRAFT
   PRESERVED
   ARCHIVED
   DELETED
+}
+
+enum DiaryInputMethod {
+  TEXT
+  VOICE
 }
 
 enum WritingMode {
@@ -32,6 +50,17 @@ enum BeneficiaryStatus {
   VERIFIED
   SUSPENDED
   REMOVED
+  DECLINED
+  REVOKED
+}
+
+enum LegacyPolicyStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  REVOKED
+  RELEASED
+  EXPIRED
 }
 
 enum PolicyStatus {
@@ -79,13 +108,81 @@ model User {
   email         String        @unique @db.VarChar(255)
   passwordHash  String        @db.VarChar(255)
   accountStatus AccountStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   owner         Owner?
   sessions      AuthSession[]
+  bio           String?       @db.Text
+  avatarUrl     String?       @db.VarChar(500)
+  timezone      String        @default("UTC") @db.VarChar(100)
+  notificationPreferences Json @default("{}")
+  notifications Notification[]
+  faceEnabled Boolean @default(false)
+  faceConsentAt DateTime?
+  faceTemplates FaceTemplate[]
+  faceChallenges FaceChallenge[]
+  faceAuditEvents FaceAuditEvent[]
 
   @@index([accountStatus])
   @@map("users")
+}
+
+model FaceTemplate {
+  id              String   @id @default(cuid())
+  userId          String
+  encryptedVector String   @db.LongText
+  keyVersion      Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("face_templates")
+}
+
+model FaceChallenge {
+  id        String   @id @default(cuid())
+  userId    String?
+  nonceHash String   @unique @db.VarChar(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("face_challenges")
+}
+
+model FaceAuditEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   @db.VarChar(40)
+  result    String   @db.VarChar(20)
+  ipHash    String?  @db.VarChar(64)
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@map("face_audit_events")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String           @db.VarChar(160)
+  body      String           @db.VarChar(500)
+  link      String?          @db.VarChar(500)
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  dedupeKey String?          @unique @db.VarChar(255)
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@map("notifications")
 }
 
 model AuthSession {
@@ -114,11 +211,29 @@ model Owner {
   protocols     Protocol[]
   grants        Grant[]
   policies      AccessPolicy[]
+  legacyPolicies LegacyPolicy[]
   wishes        LetterOfWishes?
   conversations AIConversation[]
   auditLogs     AccessAuditLog[]
+  legacyAuditLogs LegacyAuditLog[]
+  lifeCountdowns LifeCountdown[]
 
   @@map("owners")
+}
+
+model LifeCountdown {
+  id             String             @id @default(cuid())
+  ownerId        String
+  durationDays   Int
+  startDate      DateTime
+  expirationDate DateTime
+  status         LifeCountdownStatus @default(ACTIVE)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  owner          Owner              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, createdAt])
+  @@map("life_countdowns")
 }
 
 model DiaryEntry {
@@ -127,6 +242,8 @@ model DiaryEntry {
   title             String            @db.VarChar(200)
   category          String            @db.VarChar(80)
   originalContent   String            @db.LongText
+  transcript        String?           @db.LongText
+  inputMethod       DiaryInputMethod  @default(TEXT)
   normalizedContent String?           @db.LongText
   entryDate         DateTime
   status            DiaryEntryStatus  @default(DRAFT)
@@ -135,11 +252,13 @@ model DiaryEntry {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   deletedAt         DateTime?
+  neverShare        Boolean           @default(false)
   owner             Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   versions          EntryVersion[]
   media             MediaAsset[]
   tags              EntryTag[]
   sourceCitations   AIMessageSource[]
+  policyLinks       LegacyPolicyEntryLink[]
 
   @@index([ownerId, entryDate])
   @@index([ownerId, status])
@@ -201,12 +320,14 @@ model Beneficiary {
   ownerId       String
   fullName      String            @db.VarChar(100)
   email         String            @db.VarChar(255)
-  relationship  String            @db.VarChar(80)
+  relationship  String?           @db.VarChar(80)
   status        BeneficiaryStatus @default(INVITED)
+  verifiedAt    DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   owner         Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   policies      AccessPolicy[]
+  legacyPolicies LegacyPolicy[]
   grants        Grant[]
   conversations AIConversation[]
   auditLogs     AccessAuditLog[]
@@ -214,6 +335,85 @@ model Beneficiary {
   @@unique([ownerId, email])
   @@index([ownerId, status])
   @@map("beneficiaries")
+}
+
+model LegacyPolicy {
+  id                    String             @id @default(cuid())
+  ownerId               String
+  beneficiaryId         String
+  name                  String             @db.VarChar(150)
+  description           String?            @db.Text
+  status                LegacyPolicyStatus @default(DRAFT)
+  accessLevel           String             @default("read_only") @db.VarChar(30)
+  scopeType             String             @db.VarChar(30)
+  scopeCategories       Json?
+  scopeDateFrom         DateTime?
+  scopeDateTo           DateTime?
+  excludedEntryIds      Json
+  releaseMethod         String             @db.VarChar(30)
+  releaseAt             DateTime?
+  verifierBeneficiaryId String?
+  coolingOffDays        Int                @default(7)
+  expiresAt             DateTime?
+  releasedAt            DateTime?
+  releaseRequestedAt    DateTime?
+  releaseReadyAt        DateTime?
+  activeScopeKey        String?            @db.VarChar(64)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  owner                 Owner              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  beneficiary           Beneficiary        @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  entryLinks            LegacyPolicyEntryLink[]
+  auditLogs             LegacyAuditLog[]
+  releaseTokens         LegacyReleaseToken[]
+
+  @@index([ownerId, status])
+  @@index([beneficiaryId])
+  @@unique([ownerId, beneficiaryId, activeScopeKey])
+  @@map("legacy_policies")
+}
+
+model LegacyPolicyEntryLink {
+  policyId String
+  entryId  String
+  policy   LegacyPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  entry    DiaryEntry   @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@id([policyId, entryId])
+  @@index([policyId])
+  @@map("policy_entry_links")
+}
+
+model LegacyAuditLog {
+  id        String        @id @default(cuid())
+  ownerId   String
+  policyId  String?
+  actorType String        @db.VarChar(20)
+  actorId   String?
+  action    String        @db.VarChar(100)
+  metadata  Json?
+  ipHash    String?       @db.VarChar(64)
+  createdAt DateTime      @default(now())
+  owner     Owner         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  policy    LegacyPolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, createdAt])
+  @@index([policyId])
+  @@map("legacy_audit_log")
+}
+
+model LegacyReleaseToken {
+  id        String   @id @default(cuid())
+  policyId  String
+  tokenHash String   @unique @db.VarChar(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  policy    LegacyPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@index([expiresAt])
+  @@map("legacy_release_tokens")
 }
 
 model Vault {

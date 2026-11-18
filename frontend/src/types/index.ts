@@ -46,6 +46,8 @@ export type ApiDiaryEntry = {
   status: string;
   access: string;
   mediaCount: number;
+  inputMethod?: 'TEXT' | 'VOICE';
+  transcript?: string | null;
 };
 
 export type DashboardData = {

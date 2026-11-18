@@ -1,7 +1,10 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const notificationMock = vi.hoisted(() => ({ createNotification: vi.fn() }));
+vi.mock('../../utils/notifications.js', () => ({ createNotification: notificationMock.createNotification, ensureDailyReminder: vi.fn() }));
 import { createApp } from '../../app.js';
-import { ConflictError, UnauthorizedError } from '../../exceptions/index.js';
+import { AccountLockedError, ConflictError, UnauthorizedError } from '../../exceptions/index.js';
 import type { AuthResult, AuthService, LoginInput, RegisterInput, SafeUser } from './auth.types.js';
 
 const user: SafeUser = {
@@ -11,6 +14,8 @@ const user: SafeUser = {
   accountStatus: 'ACTIVE',
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
 };
+
+beforeEach(() => { notificationMock.createNotification.mockResolvedValue(null); });
 
 function createFakeAuthService(): AuthService {
   let registeredUser: SafeUser | undefined;
@@ -61,7 +66,61 @@ describe('authentication API', () => {
       .send({ email: 'unknown@example.test', password: 'wrong' });
 
     expect(response.status).toBe(401);
-    expect(response.body.error.message).toBe('Invalid email or password.');
+    expect(response.body.error.message).toBe('Incorrect email or password.');
+    expect(response.headers['x-request-id']).toBeTruthy();
+    expect(response.body.error.requestId).toBe(response.headers['x-request-id']);
+  });
+
+  it('returns 422 for invalid login fields', async () => {
+    const response = await request(createApp(createFakeAuthService())).post('/api/auth/login').send({ email: 'not-an-email', password: '' });
+    expect(response.status).toBe(422);
+    expect(response.body.error.message).toBe('Enter a valid email address.');
+  });
+
+  it('returns 423 when the account is not active', async () => {
+    const base = createFakeAuthService();
+    const locked: AuthService = { ...base, async login() { throw new AccountLockedError(); } };
+    const response = await request(createApp(locked))
+      .post('/api/auth/login')
+      .send({ email: user.email, password: 'CorrectPassword1' });
+    expect(response.status).toBe(423);
+    expect(response.body.error.code).toBe('ACCOUNT_LOCKED');
+  });
+
+  it('returns a safe client error for malformed login JSON', async () => {
+    const response = await request(createApp(createFakeAuthService()))
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{');
+    expect(response.status).toBe(400);
+    expect(response.body.error.message).toBe('Request body must contain valid JSON.');
+  });
+
+  it('completes login if writing the security notification fails', async () => {
+    notificationMock.createNotification.mockRejectedValueOnce(new Error('Notification database unavailable'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const response = await request(createApp(createFakeAuthService()))
+      .post('/api/auth/login')
+      .send({ email: user.email, password: 'CorrectPassword1' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.headers['x-request-id']).toBeTruthy();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('security_notification'));
+    log.mockRestore();
+  });
+
+  it('logs unexpected login faults with a request ID and keeps details out of the response', async () => {
+    const base = createFakeAuthService();
+    const broken: AuthService = { ...base, async login() { throw new Error('private database diagnostic'); } };
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const response = await request(createApp(broken)).post('/api/auth/login').send({ email: user.email, password: 'CorrectPassword1' });
+    expect(response.status).toBe(500);
+    expect(response.body.error.message).toBe('An unexpected error occurred.');
+    expect(JSON.stringify(response.body)).not.toContain('private database diagnostic');
+    expect(response.body.error.requestId).toBe(response.headers['x-request-id']);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining(response.headers['x-request-id']));
+    log.mockRestore();
   });
 
   it('sets an http-only cookie and protects the current-user endpoint', async () => {
