@@ -48,6 +48,9 @@ export type ApiDiaryEntry = {
   mediaCount: number;
   inputMethod?: 'TEXT' | 'VOICE';
   transcript?: string | null;
+  emotion?: 'JOY' | 'SADNESS' | 'ANGER' | 'FEAR' | 'DISGUST' | 'ANXIETY' | null;
+  photoCount?: number;
+  photos?: Array<{ id: string; width: number; height: number; altText: string | null; thumbnailUrl: string; fullUrl?: string }>;
 };
 
 export type DashboardData = {

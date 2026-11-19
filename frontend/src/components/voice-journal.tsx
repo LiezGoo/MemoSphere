@@ -42,6 +42,7 @@ export default function VoiceJournal({ transcript, onTranscriptChange, onTranscr
   const [preview, setPreview] = useState<string | null>(null);
   const [previewNote, setPreviewNote] = useState('');
   const [previewing, setPreviewing] = useState(false);
+  const [geminiConsent, setGeminiConsent] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const audioPlayer = useRef<HTMLAudioElement>(null);
   const transcriptInput = useRef<HTMLTextAreaElement>(null);
@@ -248,7 +249,7 @@ export default function VoiceJournal({ transcript, onTranscriptChange, onTranscr
     setPreviewing(true);
     setError('');
     try {
-      const result = await writingModeService.process({ mode, content: transcript });
+      const result = await writingModeService.process({ mode, content: transcript, consentToGemini: mode !== 'VERBATIM' ? geminiConsent : undefined });
       setPreview(result.version.processedContent);
       setPreviewNote(result.version.processingNotes ?? '');
     } catch (reason) {
@@ -296,7 +297,8 @@ export default function VoiceJournal({ transcript, onTranscriptChange, onTranscr
         <label className="form-field"><span>Edit the transcription</span><textarea ref={transcriptInput} rows={7} value={transcript} onChange={(event) => { onTranscriptChange(event.target.value); setPreview(null); setPreviewNote(''); }} disabled={disabled} /></label>
         <div className="voice-writing-tools">
           <label className="form-field"><span>Preview a writing mode</span><Select value={mode} onChange={(event) => { setMode(event.target.value as WritingMode); setPreview(null); setPreviewNote(''); }} disabled={previewing || disabled} options={[{ value: 'VERBATIM', label: 'Verbatim' }, { value: 'LIGHT_FIX', label: 'Light Fix' }, { value: 'REVIEW', label: 'Review' }]} /></label>
-          <button className="voice-control" type="button" onClick={() => { void previewWritingMode(); }} disabled={!transcript.trim() || previewing || disabled}>{previewing ? 'Preparing preview...' : 'Preview mode'}</button>
+          {mode !== 'VERBATIM' && <label className="voice-gemini-consent"><input type="checkbox" checked={geminiConsent} onChange={(event) => setGeminiConsent(event.target.checked)} disabled={previewing || disabled} /> I consent to sending this transcript to Google Gemini for writing assistance.</label>}
+          <button className="voice-control" type="button" onClick={() => { void previewWritingMode(); }} disabled={!transcript.trim() || previewing || disabled || (mode !== 'VERBATIM' && !geminiConsent)}>{previewing ? 'Preparing preview...' : 'Preview mode'}</button>
         </div>
         {preview !== null && <div className="voice-comparison"><div><span className="field-label">Suggested version - {mode.replace('_', ' ')}</span><p>{preview || 'The preview is empty.'}</p></div>{previewNote && <p className="field-help">{previewNote}</p>}<div className="voice-comparison-actions"><button className="voice-control" type="button" onClick={() => { setPreview(null); setPreviewNote(''); }}>Keep my text</button><button className="voice-control voice-control-primary" type="button" onClick={usePreview}>Use this version</button></div></div>}
       </div>}

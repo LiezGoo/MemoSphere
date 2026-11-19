@@ -2,7 +2,7 @@ ALTER TABLE `users`
   ADD COLUMN `bio` TEXT NULL,
   ADD COLUMN `avatarUrl` VARCHAR(500) NULL,
   ADD COLUMN `timezone` VARCHAR(100) NOT NULL DEFAULT 'UTC',
-  ADD COLUMN `notificationPreferences` JSON NOT NULL DEFAULT (JSON_OBJECT());
+  ADD COLUMN `notificationPreferences` JSON NULL;
 
 CREATE TABLE `notifications` (
   `id` VARCHAR(191) NOT NULL,

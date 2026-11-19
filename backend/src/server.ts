@@ -7,7 +7,7 @@ if (!environment.DATABASE_URL) {
   throw new Error('DATABASE_URL must be configured before starting the backend.');
 }
 
-const port = environment.BACKEND_PORT;
+const port = environment.PORT ?? environment.BACKEND_PORT;
 
 app.listen(port, () => {
   console.log(`MemoSphere backend listening on port ${port}`);

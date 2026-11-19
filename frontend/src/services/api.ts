@@ -88,7 +88,31 @@ export const diaryService = {
   get: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}`).then((result) => result.data.entry),
   update: (id: string, payload: unknown) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) }).then((result) => result.data.entry),
   remove: (id: string) => apiRequest(`/api/diary/entries/${id}`, { method: 'DELETE' }),
+  photoSignature: (count: number) => apiRequest<{ success: true; data: { cloudName: string; apiKey: string; timestamp: number; folder: string; type: string; transformation: string; signature: string } }>('/api/diary/upload-signature', { method: 'POST', body: JSON.stringify({ count }) }).then((result) => result.data),
+  discardPhoto: (publicId: string) => apiRequest(`/api/diary/photos/unattached`, { method: 'DELETE', body: JSON.stringify({ publicId }) }),
+  setEmotion: (id: string, emotion: 'JOY' | 'SADNESS' | 'ANGER' | 'FEAR' | 'DISGUST' | 'ANXIETY') => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/emotion`, { method: 'PATCH', body: JSON.stringify({ emotion }) }).then((result) => result.data.entry),
+  classifyEmotion: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/classify-emotion`, { method: 'POST', body: JSON.stringify({}) }).then((result) => result.data.entry),
 };
+
+export async function uploadDiaryPhoto(file: Blob, name: string, onProgress: (progress: number) => void) {
+  const signature = await diaryService.photoSignature(1);
+  const data = new FormData();
+  data.append('file', file, name);
+  data.append('api_key', signature.apiKey);
+  data.append('timestamp', String(signature.timestamp));
+  data.append('folder', signature.folder);
+  data.append('type', signature.type);
+  data.append('transformation', signature.transformation);
+  data.append('signature', signature.signature);
+  return new Promise<{ public_id: string }>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', `https://api.cloudinary.com/v1_1/${signature.cloudName}/image/upload`);
+    request.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100)); };
+    request.onload = () => { if (request.status >= 200 && request.status < 300) resolve(JSON.parse(request.responseText) as { public_id: string }); else reject(new Error('Cloud photo upload failed.')); };
+    request.onerror = () => reject(new Error('Cloud photo upload failed.'));
+    request.send(data);
+  });
+}
 
 export const dashboardService = {
   get: () => apiRequest<DashboardApiResponse>('/api/dashboard').then((result) => result.data),
@@ -96,6 +120,11 @@ export const dashboardService = {
 
 export const assistantService = {
   ask: (payload: { conversationId?: string; question: string }) => apiRequest<{ success: true; data: AssistantReply }>('/api/ai/conversations/messages', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
+  createConversation: (mode: 'AI_BUDDY' | 'DIARY_ASSISTANT', title?: string) => apiRequest<{ success: true; data: { conversation: { id: string; mode: 'AI_BUDDY' | 'DIARY_ASSISTANT'; title: string | null; createdAt: string; updatedAt: string } } }>('/api/ai/conversations', { method: 'POST', body: JSON.stringify({ mode, title }) }).then((result) => result.data.conversation),
+  listConversations: (mode?: 'AI_BUDDY' | 'DIARY_ASSISTANT') => apiRequest<{ success: true; data: { conversations: Array<{ id: string; mode: 'AI_BUDDY' | 'DIARY_ASSISTANT'; title: string | null; createdAt: string; updatedAt: string }> } }>(`/api/ai/conversations${mode ? `?mode=${mode}` : ''}`).then((result) => result.data.conversations),
+  getConversation: (id: string) => apiRequest<{ success: true; data: { conversation: { id: string; mode: 'AI_BUDDY' | 'DIARY_ASSISTANT'; title: string | null; messages: Array<{ id: string; role: 'USER' | 'ASSISTANT'; content: string; createdAt: string; sources?: unknown[] }> } } }>(`/api/ai/conversations/${encodeURIComponent(id)}`).then((result) => result.data.conversation),
+  send: (id: string, question: string) => apiRequest<{ success: true; data: AssistantReply }>(`/api/ai/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', body: JSON.stringify({ question }) }).then((result) => result.data),
+  removeConversation: (id: string) => apiRequest<void>(`/api/ai/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 export const beneficiaryService = {
@@ -126,7 +155,7 @@ export const legacyPolicyService = {
 };
 
 export const writingModeService = {
-  process: (payload: { diaryEntryId?: string; mode: 'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'; content: string }) => apiRequest<{ success: true; data: { version: { processedContent: string; processingNotes: string | null }; persisted?: boolean } }>('/api/diary/writing-modes/process', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
+  process: (payload: { diaryEntryId?: string; mode: 'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'; content: string; consentToGemini?: boolean }) => apiRequest<{ success: true; data: { version: { processedContent: string; processingNotes: string | null }; persisted?: boolean } }>('/api/diary/writing-modes/process', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
 };
 
 export const transcriptionService = {

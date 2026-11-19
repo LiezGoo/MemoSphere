@@ -1,0 +1,2 @@
+ALTER TABLE `diary_entries`
+  ADD COLUMN `emotion` ENUM('JOY', 'SADNESS', 'ANGER', 'FEAR', 'DISGUST', 'ANXIETY') NULL;

@@ -38,6 +38,15 @@ enum DiaryInputMethod {
   VOICE
 }
 
+enum Emotion {
+  JOY
+  SADNESS
+  ANGER
+  FEAR
+  DISGUST
+  ANXIETY
+}
+
 enum WritingMode {
   VERBATIM
   LIGHT_FIX
@@ -100,6 +109,11 @@ enum AIMessageRole {
   USER
   ASSISTANT
   SYSTEM
+}
+
+enum AIChatMode {
+  AI_BUDDY
+  DIARY_ASSISTANT
 }
 
 model User {
@@ -253,16 +267,36 @@ model DiaryEntry {
   updatedAt         DateTime          @updatedAt
   deletedAt         DateTime?
   neverShare        Boolean           @default(false)
+  emotion           Emotion?
   owner             Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   versions          EntryVersion[]
   media             MediaAsset[]
   tags              EntryTag[]
   sourceCitations   AIMessageSource[]
   policyLinks       LegacyPolicyEntryLink[]
+  photos            EntryPhoto[]
 
   @@index([ownerId, entryDate])
   @@index([ownerId, status])
   @@map("diary_entries")
+}
+
+model EntryPhoto {
+  id                  String     @id @default(cuid())
+  entryId             String
+  ownerId             String
+  cloudinaryPublicId  String     @unique @db.VarChar(512)
+  width               Int
+  height              Int
+  bytes               Int
+  altText             String?    @db.VarChar(200)
+  position            Int        @default(0)
+  createdAt           DateTime   @default(now())
+  entry               DiaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId, position])
+  @@index([ownerId])
+  @@map("entry_photos")
 }
 
 model EntryVersion {
@@ -532,6 +566,7 @@ model AIConversation {
   id            String       @id @default(cuid())
   ownerId       String
   beneficiaryId String?
+  mode          AIChatMode   @default(AI_BUDDY)
   title         String?      @db.VarChar(200)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt

@@ -1,14 +1,14 @@
 'use client';
 
 import {
-  ArrowUp, ArrowUpRight, BookHeart, BookOpen, CalendarDays, Check, ChevronDown, Clock3, KeyRound,
-  Mic, MoreHorizontal, Plus, Search, ShieldCheck, Sparkles, Trash2, UsersRound, X,
+  ArrowUp, ArrowUpRight, BookHeart, BookOpen, Check, Clock3, KeyRound,
+  ImagePlus, Mic, MoreHorizontal, Plus, Search, ShieldCheck, Sparkles, Trash2, UsersRound, X,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react';
 import {
   activityService, beneficiaryService, dashboardService,
-  diaryService, legacyPolicyService, settingsService, writingModeService, ApiError,
+  diaryService, legacyPolicyService, settingsService, uploadDiaryPhoto, writingModeService, ApiError,
 } from '@/services/api';
 import type { ApiDiaryEntry, DashboardData } from '@/types';
 import type { LegacyBeneficiary, LegacyPolicy } from '@/services/api';
@@ -18,6 +18,7 @@ import LifeCountdownMonitor from '@/components/life-countdown-monitor';
 import ProfileSettings from '@/components/profile-settings';
 import Select from '@/components/ui/select';
 import WishesEditor from '@/components/wishes-editor';
+import AIChatPanel from '@/components/ai-chat-panel';
 
 function Button({ children, variant = 'primary', className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger'; className?: string }) {
   return <button className={`button button-${variant} ${className}`} {...props}>{children}</button>;
@@ -35,8 +36,19 @@ function Empty({ title, message, action }: { title: string; message: string; act
   return <div className="empty-state"><div className="empty-icon"><BookOpen size={22} /></div><h3>{title}</h3><p>{message}</p>{action}</div>;
 }
 function formatDate(value: string) { return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+async function preparePhoto(file: File) {
+  const image = new Image();
+  image.src = URL.createObjectURL(file);
+  await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('This image could not be read.')); });
+  const scale = Math.min(1, 2000 / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(image.src);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('This image could not be prepared.')), file.type, .86));
+}
 function LiveEntryRow({ entry, onDelete }: { entry: ApiDiaryEntry; onDelete?: (entry: ApiDiaryEntry) => void }) {
-  return <div className="entry-row"><div className="entry-date"><strong>{new Date(entry.entryDate).getDate()}</strong><span>{new Date(entry.entryDate).toLocaleString(undefined, { month: 'short' })}</span></div><div className="entry-row-content"><div className="entry-title-line"><a href={`/my-diary?entry=${entry.id}`}>{entry.title}</a><Badge tone="slate">{entry.access}</Badge></div><p>{entry.preview}</p><div className="entry-meta"><span>{entry.category}</span>{entry.mediaCount > 0 && <span>· {entry.mediaCount} media</span>}</div></div>{onDelete ? <button className="icon-button" aria-label={`Delete ${entry.title}`} onClick={() => onDelete(entry)}><MoreHorizontal size={18} /></button> : <ArrowUpRight size={17} className="row-arrow" />}</div>;
+  return <div className="entry-row"><div className="entry-date"><strong>{new Date(entry.entryDate).getDate()}</strong><span>{new Date(entry.entryDate).toLocaleString(undefined, { month: 'short' })}</span></div>{entry.photos?.[0] && <img className="entry-thumb" src={entry.photos[0].thumbnailUrl} alt="" loading="lazy" /> }<div className="entry-row-content"><div className="entry-title-line"><a href={`/my-diary?entry=${entry.id}`}>{entry.title}</a><Badge tone="slate">{entry.access}</Badge></div><p>{entry.preview || (entry.photoCount ? 'Photo entry' : '')}</p><div className="entry-meta"><span>{entry.category}</span>{entry.photoCount ? <span>· {entry.photoCount > 1 ? `+${entry.photoCount - 1} photos` : '1 photo'}</span> : null}</div></div>{onDelete ? <button className="icon-button" aria-label={`Delete ${entry.title}`} onClick={() => onDelete(entry)}><MoreHorizontal size={18} /></button> : <ArrowUpRight size={17} className="row-arrow" />}</div>;
 }
 function DashboardView({ onWrite }: { onWrite: () => void }) {
   const [data, setData] = useState<DashboardData | null>(null); const [error, setError] = useState<string | null>(null);
@@ -49,24 +61,24 @@ function DashboardView({ onWrite }: { onWrite: () => void }) {
 }
 function Stat({ icon: Icon, label, value, tone }: { icon: typeof BookOpen; label: string; value: number; tone: string }) { return <div className="stat-card"><div className={`stat-icon ${tone}`}><Icon size={18} /></div><p>{label}</p><strong>{value}</strong></div>; }
 function DiaryEntryDialog({ entry, onClose, onSaved }: { entry: ApiDiaryEntry; onClose: () => void; onSaved: (entry: ApiDiaryEntry) => void }) {
-  const [form, setForm] = useState({ title: entry.title, category: entry.category, content: entry.content, entryDate: entry.entryDate.slice(0, 10) });
+  const [form, setForm] = useState({ content: entry.content });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
     try {
-      const updated = await diaryService.update(entry.id, { ...form, entryDate: new Date(form.entryDate).toISOString() });
+      const updated = await diaryService.update(entry.id, form);
       onSaved(updated);
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : 'Unable to update entry.');
       setSaving(false);
     }
   };
-  return <div className="dialog-backdrop"><form className="dialog form-dialog" role="dialog" aria-modal="true" onSubmit={save}><button type="button" className="icon-button dialog-close" onClick={onClose} aria-label="Close"><X size={18} /></button><p className="eyebrow">Saved memory</p><h2>Edit diary entry</h2><label className="form-field"><span>Title</span><input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label><label className="form-field"><span>Category</span><Select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} options={[{ value: 'Family', label: 'Family' }, { value: 'Milestones', label: 'Milestones' }, { value: 'Reflections', label: 'Reflections' }, { value: 'Lessons', label: 'Lessons' }]} /></label><label className="form-field"><span>Entry date</span><input type="date" required value={form.entryDate} onChange={(event) => setForm({ ...form, entryDate: event.target.value })} /></label><label className="form-field"><span>Content</span><textarea required rows={8} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} /></label><p className="field-help">Your original submitted content remains preserved in database history.</p>{error && <p className="field-error" role="alert">{error}</p>}<div className="dialog-actions"><Button type="button" variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</Button></div></form></div>;
+  return <div className="dialog-backdrop"><form className="dialog form-dialog" role="dialog" aria-modal="true" onSubmit={save}><button type="button" className="icon-button dialog-close" onClick={onClose} aria-label="Close"><X size={18} /></button><p className="eyebrow">Saved memory</p><h2>Edit diary entry</h2><label className="form-field"><span>Entry</span><textarea required rows={8} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} /></label><p className="field-help">Your original submitted content remains preserved in database history.</p>{error && <p className="field-error" role="alert">{error}</p>}<div className="dialog-actions"><Button type="button" variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</Button></div></form></div>;
 }
 function DiaryReadingDialog({ entry, onClose, onEdit }: { entry: ApiDiaryEntry; onClose: () => void; onEdit: () => void }) {
-  return <div className="dialog-backdrop"><article className="dialog diary-reader" role="dialog" aria-modal="true" aria-labelledby="diary-reader-title"><button type="button" className="icon-button dialog-close" aria-label="Close entry" onClick={onClose}><X size={18} /></button><h1 id="diary-reader-title">{entry.title}</h1><p className="diary-reader-meta">{entry.category} · {formatDate(entry.entryDate)}</p><div className="diary-reader-content">{entry.content}</div><div className="dialog-actions"><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={onEdit}>Edit entry</Button></div></article></div>;
+  return <div className="dialog-backdrop"><article className="dialog diary-reader" role="dialog" aria-modal="true" aria-labelledby="diary-reader-title"><button type="button" className="icon-button dialog-close" aria-label="Close entry" onClick={onClose}><X size={18} /></button><h1 id="diary-reader-title">{entry.title}</h1><p className="diary-reader-meta">{entry.category} · {formatDate(entry.entryDate)}</p><div className="diary-reader-content">{entry.content}</div>{entry.photos?.length ? <div className="diary-photo-grid">{entry.photos.map((photo) => <a key={photo.id} href={photo.fullUrl ?? photo.thumbnailUrl} target="_blank" rel="noreferrer"><img src={photo.fullUrl ?? photo.thumbnailUrl} alt={photo.altText ?? 'Diary photo'} loading="lazy" /></a>)}</div> : null}<div className="dialog-actions"><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={onEdit}>Edit entry</Button></div></article></div>;
 }
 function DiaryView({ initialQuery = '', showSearch = false }: { initialQuery?: string; showSearch?: boolean }) {
   const [entries, setEntries] = useState<ApiDiaryEntry[]>([]); const [query, setQuery] = useState(initialQuery); const [total, setTotal] = useState(0); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [target, setTarget] = useState<ApiDiaryEntry | null>(null); const [selected, setSelected] = useState<ApiDiaryEntry | null>(null); const [selectedError, setSelectedError] = useState<string | null>(null);
@@ -74,32 +86,53 @@ function DiaryView({ initialQuery = '', showSearch = false }: { initialQuery?: s
   useEffect(load, [query]);
   useEffect(() => { const id = new URLSearchParams(window.location.search).get('entry'); if (!id) return; diaryService.get(id).then(setSelected).catch((reason) => setSelectedError(reason instanceof ApiError ? reason.message : 'Unable to load this entry.')); }, []);
   const remove = async () => { if (!target) return; try { await diaryService.remove(target.id); setTarget(null); if (selected?.id === target.id) setSelected(null); load(); } catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to archive entry.'); setTarget(null); } };
-  const [draft, setDraft] = useState({ title: '', category: 'Reflections', originalContent: '', entryDate: new Date().toISOString().slice(0, 10) }); const [editing, setEditing] = useState(false);
-  const [menu, setMenu] = useState<'add' | 'category' | 'date' | null>(null);
+  const [draft, setDraft] = useState({ originalContent: '' }); const [editing, setEditing] = useState(false);
+  const [photos, setPhotos] = useState<Array<{ id: string; name: string; preview: string; progress: number; error?: string }>>([]);
   const [voice, setVoice] = useState(false); const [voiceEntry, setVoiceEntry] = useState(false); const [transcript, setTranscript] = useState(''); const [sourceTranscript, setSourceTranscript] = useState(''); const [recording, setRecording] = useState(false); const [saving, setSaving] = useState(false); const [createError, setCreateError] = useState('');
-  const editor = useRef<HTMLTextAreaElement>(null); const titleInput = useRef<HTMLInputElement>(null); const addButton = useRef<HTMLButtonElement>(null);
+  const editor = useRef<HTMLTextAreaElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
   useEffect(() => { if (entries.length === 0 && !query) editor.current?.focus(); }, [entries.length, query]);
-  useEffect(() => { const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && menu) { setMenu(null); addButton.current?.focus(); return; } if (menu && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) { const items = document.querySelectorAll<HTMLElement>('.diary-popover [role="menuitem"]'); if (!items.length) return; event.preventDefault(); const current = Array.from(items).indexOf(document.activeElement as HTMLElement); const next = event.key === 'ArrowDown' ? (current + 1) % items.length : (current <= 0 ? items.length - 1 : current - 1); items[next].focus(); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [menu]);
   const setContent = (value: string) => { setDraft((current) => ({ ...current, originalContent: value })); if (editor.current) { editor.current.style.height = 'auto'; editor.current.style.height = `${Math.min(editor.current.scrollHeight, 192)}px`; } };
+  const selectPhotos = async (files: FileList | File[]) => {
+    const selected = Array.from(files);
+    if (photos.length + selected.length > 5) { setCreateError('You can attach up to 5 photos.'); return; }
+    const valid = selected.filter((file) => ['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && file.size <= 5 * 1024 * 1024);
+    if (valid.length !== selected.length) { setCreateError('Photos must be JPG, PNG, or WebP and no larger than 5 MB each.'); }
+    for (const file of valid) {
+      const id = `${file.name}-${file.lastModified}`;
+      let prepared: Blob;
+      try { prepared = await preparePhoto(file); } catch (reason) { setCreateError(reason instanceof Error ? reason.message : 'This image could not be prepared.'); continue; }
+      const preview = URL.createObjectURL(prepared);
+      setPhotos((current) => [...current, { id, name: file.name, preview, progress: 0 }]);
+      try {
+        const uploaded = await uploadDiaryPhoto(prepared, file.name, (progress) => setPhotos((current) => current.map((photo) => photo.id === id ? { ...photo, progress } : photo)));
+        setPhotos((current) => current.map((photo) => photo.id === id ? { ...photo, id: uploaded.public_id, progress: 100 } : photo));
+      } catch (reason) {
+        setPhotos((current) => current.map((photo) => photo.id === id ? { ...photo, error: reason instanceof Error ? reason.message : 'Upload failed.' } : photo));
+      }
+    }
+  };
   const createEntry = async () => {
-    const title = draft.title.trim(); const originalContent = draft.originalContent.trim();
-    if (!title || !originalContent) { setCreateError(!title ? 'A title is required.' : 'Diary content is required.'); return; }
+    const originalContent = draft.originalContent.trim();
+    if (!originalContent && photos.length === 0) { setCreateError('Add text or at least one photo.'); return; }
+    if (photos.some((photo) => photo.progress < 100 || photo.error)) { setCreateError('Wait for photos to finish uploading or remove failed photos.'); return; }
     if (voiceEntry && !sourceTranscript.trim()) { setCreateError('Transcribe your recording before saving the voice entry.'); return; }
     setSaving(true); setCreateError('');
-    try { await diaryService.create({ ...draft, title, originalContent, inputMethod: voiceEntry ? 'VOICE' : 'TEXT', ...(voiceEntry ? { transcript: sourceTranscript.trim() } : {}), entryDate: new Date(draft.entryDate).toISOString() }); setDraft({ title: '', category: 'Reflections', originalContent: '', entryDate: new Date().toISOString().slice(0, 10) }); setTranscript(''); setSourceTranscript(''); setVoice(false); setVoiceEntry(false); setRecording(false); load(); }
+    try { await diaryService.create({ originalContent, photoPublicIds: photos.map((photo) => photo.id), inputMethod: voiceEntry ? 'VOICE' : 'TEXT', ...(voiceEntry ? { transcript: sourceTranscript.trim() } : {}) }); photos.forEach((photo) => URL.revokeObjectURL(photo.preview)); setPhotos([]); setDraft({ originalContent: '' }); setTranscript(''); setSourceTranscript(''); setVoice(false); setVoiceEntry(false); setRecording(false); load(); }
     catch (reason) { setCreateError(reason instanceof ApiError ? reason.message : 'Unable to save entry.'); } finally { setSaving(false); }
   };
   const groups = entries.reduce<Record<string, ApiDiaryEntry[]>>((acc, entry) => { const day = Math.floor((Date.now() - new Date(entry.entryDate).getTime()) / 86400000); const key = day < 1 ? 'Today' : day < 2 ? 'Yesterday' : day < 7 ? 'Previous 7 days' : new Date(entry.entryDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }); (acc[key] ??= []).push(entry); return acc; }, {});
   const groupOrder = ['Today', 'Yesterday', 'Previous 7 days'];
   return <section className="diary-page"><h1 className="diary-access-title">My diary</h1><header className="diary-greeting"><p>What's on your mind today?</p><span>A quiet place for what matters.</span></header>
     <div className="diary-composer" onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); void createEntry(); } }}>
-      <input ref={titleInput} className="diary-title-input" aria-label="Title (required)" aria-required="true" maxLength={200} placeholder="Title (required)" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
-      <div className="diary-chip-row"><button type="button" className="diary-chip" title="Reset category to Reflections" onClick={() => setDraft({ ...draft, category: 'Reflections' })}>{draft.category}<span aria-hidden="true">×</span></button><button type="button" className="diary-chip" title="Reset date to today" onClick={() => setDraft({ ...draft, entryDate: new Date().toISOString().slice(0, 10) })}><CalendarDays size={13} />{new Date(`${draft.entryDate}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}<span aria-hidden="true">×</span></button></div>
-      <div className="diary-compose-line"><div className="diary-menu-anchor"><button ref={addButton} type="button" className="diary-round-button" aria-label="Add entry details" aria-expanded={menu === 'add'} onClick={() => setMenu(menu === 'add' ? null : 'add')}><Plus size={19} /></button>{menu === 'add' && <div className="diary-popover" role="menu"><button role="menuitem" onClick={() => { setMenu(null); titleInput.current?.focus(); }}>Title</button><button role="menuitem" onClick={() => setMenu('category')}>Category <ChevronDown size={14} /></button><button role="menuitem" onClick={() => setMenu('date')}>Entry date <CalendarDays size={14} /></button></div>}{menu === 'category' && <div className="diary-popover" role="menu">{['Family','Milestones','Reflections','Lessons'].map((value) => <button role="menuitem" key={value} onClick={() => { setDraft({ ...draft, category: value }); setMenu(null); }}>{value}</button>)}</div>}{menu === 'date' && <div className="diary-popover diary-date-popover"><label>Entry date<input type="date" value={draft.entryDate} onChange={(event) => setDraft({ ...draft, entryDate: event.target.value })} /></label><button onClick={() => setMenu(null)}>Done</button></div>}</div>
-        {voice ? <div className="diary-voice-wrap"><VoiceJournal transcript={transcript} onTranscriptChange={setTranscript} onTranscribed={setSourceTranscript} onRecordingChange={setRecording} disabled={saving} /></div> : <textarea ref={editor} className="diary-textarea" aria-label="Diary entry" rows={1} maxLength={100000} placeholder="Write about your day..." value={draft.originalContent} onChange={(event) => { if (voiceEntry) setSourceTranscript(''); setContent(event.target.value); }} />}
+      <div className="diary-compose-line" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void selectPhotos(event.dataTransfer.files); }} onPaste={(event) => { const pasted = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/')); if (pasted.length) void selectPhotos(pasted); }}>
+        <button type="button" className="diary-round-button" aria-label="Add photo" onClick={() => photoInput.current?.click()}><ImagePlus size={18} /></button>
+        <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={(event) => { if (event.target.files) void selectPhotos(event.target.files); event.currentTarget.value = ''; }} />
+        {photos.length > 0 && <div className="diary-photo-strip" aria-label={`${photos.length} of 5 photos selected`}><span className="diary-photo-count">{photos.length}/5</span>{photos.map((photo) => <div className="diary-photo-item" key={photo.id}><img src={photo.preview} alt={photo.name} /><button type="button" aria-label={`Remove ${photo.name}`} onClick={() => { URL.revokeObjectURL(photo.preview); if (photo.progress === 100 && !photo.error) void diaryService.discardPhoto(photo.id).catch(() => undefined); setPhotos((current) => current.filter((item) => item.id !== photo.id)); }}><X size={13} /></button>{photo.progress < 100 && !photo.error && <progress max="100" value={photo.progress} aria-label={`Uploading ${photo.name}`} />}{photo.error && <span className="field-error" role="alert">{photo.error}</span>}</div>)}</div>}
+        {voice ? <div className="diary-voice-wrap"><VoiceJournal transcript={transcript} onTranscriptChange={setTranscript} onTranscribed={setSourceTranscript} onRecordingChange={setRecording} disabled={saving} /></div> : <textarea ref={editor} className="diary-textarea" aria-label="Diary entry" rows={1} maxLength={100000} placeholder="Write about your day, or add photos..." value={draft.originalContent} onChange={(event) => { if (voiceEntry) setSourceTranscript(''); setContent(event.target.value); }} />}
         {!voice && <button type="button" className={`diary-round-button diary-submit ${draft.originalContent.trim() ? 'has-text' : ''}`} aria-label={draft.originalContent.trim() ? 'Save diary entry' : 'Speak instead'} title={draft.originalContent.trim() ? 'Save diary entry' : 'Speak instead'} disabled={saving} onClick={() => { if (draft.originalContent.trim()) void createEntry(); else { setVoiceEntry(true); setVoice(true); } }}>{draft.originalContent.trim() ? <ArrowUp size={19} /> : <Mic size={18} />}</button>}
       </div>{voice && <div className="diary-voice-actions"><span className={recording ? 'recording-indicator' : ''}>{recording ? 'Recording…' : 'Voice entry'}</span><button type="button" aria-label="Cancel voice entry" onClick={() => { setVoice(false); setVoiceEntry(false); setTranscript(''); setSourceTranscript(''); setRecording(false); }}>×</button><button type="button" aria-label="Use transcription" disabled={!sourceTranscript} onClick={() => { setContent(transcript); setVoice(false); }}><Check size={17} /></button></div>}
-      {createError && <p className="field-error" role="alert">{createError}</p>}<div className="diary-composer-foot"><span>Enter for a new line · Ctrl/Cmd + Enter to save</span>{draft.originalContent.trim() && <button type="button" onClick={() => void createEntry()} disabled={saving}>{saving ? 'Saving…' : 'Save diary entry'}</button>}</div>
+      {createError && <p className="field-error" role="alert">{createError}</p>}<div className="diary-composer-foot"><span>Enter for a new line · Ctrl/Cmd + Enter to save</span>{(draft.originalContent.trim() || photos.length > 0) && <button type="button" onClick={() => void createEntry()} disabled={saving || photos.some((photo) => photo.progress < 100 && !photo.error)}>{saving ? 'Saving…' : 'Save diary entry'}</button>}</div>
     </div>
     {showSearch && <div className="diary-history-toolbar"><label className="search-input"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search entries" /></label><span>{total} {total === 1 ? 'entry' : 'entries'}</span></div>}
     {error ? <StateMessage title="Diary unavailable" message={error} retry={load} /> : loading ? <div className="diary-skeleton" role="status" aria-label="Loading diary entries"><i /><i /><i /></div> : !entries.length ? <div className="diary-history"><section><h2>Your entries {!showSearch && <span className="diary-entry-count">{total} {total === 1 ? 'entry' : 'entries'}</span>}</h2><p className="diary-empty">Your saved moments will find a home here.</p></section></div> : <div className="diary-history">{Object.entries(groups).sort(([a], [b]) => { const order = [...groupOrder, ...Object.keys(groups).filter((key) => !groupOrder.includes(key))]; return order.indexOf(a) - order.indexOf(b); }).map(([group, items], index) => <section key={group}><h2>{group}{!showSearch && index === 0 && <span className="diary-entry-count">{total} {total === 1 ? 'entry' : 'entries'}</span>}</h2>{items.map((entry) => <article className="diary-history-row" key={entry.id}><a href={`/my-diary?entry=${entry.id}`}><strong>{entry.title}</strong><span>{entry.preview}</span><small>{entry.category} · {formatDate(entry.entryDate)}</small></a><button type="button" className="diary-row-menu" aria-label={`Archive ${entry.title}`} onClick={() => setTarget(entry)}><MoreHorizontal size={18} /></button></article>)}</section>)}</div>}
@@ -156,11 +189,34 @@ function PolicyView() {
   </>;
 }
 function ActivityView() { const [items, setItems] = useState<Array<{ id: string; action: string; resourceType: string; result: string; createdAt: string }>>([]); const [error, setError] = useState(''); useEffect(() => { activityService.list().then((result) => setItems(result.activities)).catch((reason) => setError(reason instanceof ApiError ? reason.message : 'Unable to load activity.')); }, []); return <><SectionHeading eyebrow="A clear record" title="Activity logs" description="Security events retrieved from your owner-scoped audit log." />{error ? <StateMessage title="Activity unavailable" message={error} /> : <div className="panel activity-panel"><div className="activity-table"><div className="table-head"><span>Activity</span><span>Resource</span><span>Result</span><span>Date</span></div>{items.length ? items.map((item) => <div className="table-row" key={item.id}><div className="activity-action"><span className="activity-icon"><Check size={14} /></span><strong>{item.action}</strong></div><span>{item.resourceType}</span><Badge tone={item.result === 'ALLOWED' ? 'green' : 'amber'}>{item.result}</Badge><span>{formatDate(item.createdAt)}</span></div>) : <Empty title="No activity yet" message="Important account actions will appear here." />}</div></div>}</>; }
-function AssistantView() { return <><SectionHeading eyebrow="Your diary companion" title="Chat with Memo" description="Memo is available throughout your private workspace." /><div className="panel assistant-page-card"><div className="assistant-page-icon"><Sparkles size={22} /></div><h2>Meet Memo</h2><p>Diary retrieval is not connected yet. Memo cannot access or cite diary entries until authorized backend retrieval is available.</p><Button onClick={() => window.dispatchEvent(new Event('alaala:assistant-open'))}><Sparkles size={17} /> Open Memo</Button></div></>; }
-function WritingView() { const [entry, setEntry] = useState<ApiDiaryEntry | null>(null); const [mode, setMode] = useState<'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'>('LIGHT_FIX'); const [output, setOutput] = useState(''); useEffect(() => { diaryService.list('?page=1&pageSize=1&sort=newest').then((result) => setEntry(result.entries[0] ?? null)); }, []); const process = async () => { if (!entry) return; const result = await writingModeService.process({ diaryEntryId: entry.id, mode, content: entry.originalContent }); setOutput((result as { version: { processedContent: string } }).version.processedContent); }; return <><SectionHeading eyebrow="Preserve your voice" title="Writing modes" description="" /><div className="panel writing-editor"><div className="editor-top"><strong>{entry?.title ?? 'No diary entries available'}</strong><Select aria-label="Writing mode" value={mode} onChange={(event) => setMode(event.target.value as typeof mode)} options={[{ value: 'VERBATIM', label: 'Verbatim' }, { value: 'LIGHT_FIX', label: 'Light Fix' }, { value: 'REVIEW', label: 'Review' }]} /></div><textarea className="writing-textarea" value={entry?.originalContent ?? ''} readOnly placeholder="Create a diary entry first." /><Button onClick={process} disabled={!entry}><Sparkles size={17} /> Process revision</Button>{output && <div className="comparison"><div><span className="field-label">Processed version</span><p>{output}</p></div></div>}</div></>; }
+function AssistantView() { return <><SectionHeading eyebrow="Your diary companion" title="Chat with Memo" description="Choose a companion or explore memories from your own diary." /><AIChatPanel /></>; }
+function WritingView() {
+  const [entry, setEntry] = useState<ApiDiaryEntry | null>(null);
+  const [mode, setMode] = useState<'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'>('LIGHT_FIX');
+  const [output, setOutput] = useState('');
+  const [consent, setConsent] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { diaryService.list('?page=1&pageSize=1&sort=newest').then((result) => setEntry(result.entries[0] ?? null)).catch((reason) => setError(reason instanceof ApiError ? reason.message : 'Unable to load the diary entry.')); }, []);
+  const process = async () => {
+    if (!entry) return;
+    setProcessing(true); setError('');
+    try {
+      const result = await writingModeService.process({ diaryEntryId: entry.id, mode, content: entry.originalContent, consentToGemini: mode !== 'VERBATIM' ? consent : undefined });
+      setOutput(result.version.processedContent);
+    } catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to process this writing mode.'); } finally { setProcessing(false); }
+  };
+  const accept = async () => {
+    if (!entry || !output) return;
+    setProcessing(true); setError('');
+    try { const updated = await diaryService.update(entry.id, { content: output }); setEntry(updated); setOutput(''); }
+    catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to accept this revision.'); } finally { setProcessing(false); }
+  };
+  return <><SectionHeading eyebrow="Preserve your voice" title="Writing modes" description="" /><div className="panel writing-editor"><div className="editor-top"><strong>{entry?.title ?? 'No diary entries available'}</strong><Select aria-label="Writing mode" value={mode} onChange={(event) => { setMode(event.target.value as typeof mode); setOutput(''); setError(''); }} disabled={processing} options={[{ value: 'VERBATIM', label: 'Verbatim' }, { value: 'LIGHT_FIX', label: 'Light Fix' }, { value: 'REVIEW', label: 'Review' }]} /></div><div className="comparison"><div><span className="field-label">Original</span><textarea className="writing-textarea" value={entry?.originalContent ?? ''} readOnly /></div>{output && <div><span className="field-label">Suggestion - accept or edit before using</span><textarea className="writing-textarea" value={output} onChange={(event) => setOutput(event.target.value)} /></div>}</div>{mode !== 'VERBATIM' && <label className="voice-gemini-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} disabled={processing} /> I consent to sending this diary text to Google Gemini.</label>}<Button onClick={() => void process()} disabled={!entry || processing || (mode !== 'VERBATIM' && !consent)}>{processing ? 'Processing...' : mode === 'VERBATIM' ? 'Preview verbatim' : 'Generate Gemini suggestion'}</Button>{output && <div className="voice-comparison-actions"><Button variant="secondary" onClick={() => setOutput('')}>Reject</Button><Button onClick={() => void accept()} disabled={processing}>Accept revised text</Button></div>}{error && <p className="field-error" role="alert">{error}</p>}</div></>;
+}
 function SettingsView() { const [fullName, setFullName] = useState(''); const [email, setEmail] = useState(''); const [message, setMessage] = useState(''); useEffect(() => { settingsService.getProfile().then((result) => { const data = result as { user: { fullName: string; email: string } }; setFullName(data.user.fullName); setEmail(data.user.email); }).catch(() => setMessage('Unable to load profile.')); }, []); const save = async () => { try { await settingsService.updateProfile({ fullName }); setMessage('Profile saved.'); } catch (reason) { setMessage(reason instanceof ApiError ? reason.message : 'Unable to save profile.'); } }; return <><SectionHeading eyebrow="Make MemoSphere yours" title="Settings" description="" action={<Button onClick={save}><Check size={16} /> Save changes</Button>} /><div className="panel settings-section"><div className="form-grid"><label className="form-field"><span>Full name</span><input value={fullName} onChange={(event) => setFullName(event.target.value)} /></label><label className="form-field"><span>Email address</span><input value={email} readOnly /></label></div>{message && <p className="field-help">{message}</p>}</div></>; }
 function CreateEntryDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ title: '', category: 'Reflections', originalContent: '', entryDate: new Date().toISOString().slice(0, 10) });
+  const [form, setForm] = useState({ originalContent: '' });
   const [inputMode, setInputMode] = useState<'TEXT' | 'VOICE'>('TEXT');
   const [transcript, setTranscript] = useState('');
   const [sourceTranscript, setSourceTranscript] = useState('');
@@ -169,17 +225,16 @@ function CreateEntryDialog({ onClose, onSaved }: { onClose: () => void; onSaved:
   const [isSaving, setIsSaving] = useState(false);
 
   const close = () => {
-    const hasUnsavedContent = Boolean(form.title.trim() || form.originalContent.trim() || transcript.trim() || voiceHasRecording);
+    const hasUnsavedContent = Boolean(form.originalContent.trim() || transcript.trim() || voiceHasRecording);
     if (hasUnsavedContent && !window.confirm('Discard this unsaved diary entry and recording?')) return;
     onClose();
   };
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const title = form.title.trim();
     const originalContent = (inputMode === 'VOICE' ? transcript : form.originalContent).trim();
-    if (!title || !originalContent) {
-      setError(!title ? 'A title is required.' : 'Diary content is required.');
+    if (!originalContent) {
+      setError('Diary content is required.');
       return;
     }
     if (inputMode === 'VOICE' && !sourceTranscript.trim()) {
@@ -189,7 +244,7 @@ function CreateEntryDialog({ onClose, onSaved }: { onClose: () => void; onSaved:
     setError('');
     setIsSaving(true);
     try {
-      await diaryService.create({ ...form, title, originalContent, inputMethod: inputMode, ...(inputMode === 'VOICE' ? { transcript: sourceTranscript.trim() } : {}), entryDate: new Date(form.entryDate).toISOString() });
+      await diaryService.create({ originalContent, inputMethod: inputMode, ...(inputMode === 'VOICE' ? { transcript: sourceTranscript.trim() } : {}) });
       onSaved();
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : 'Unable to save entry.');
@@ -202,11 +257,6 @@ function CreateEntryDialog({ onClose, onSaved }: { onClose: () => void; onSaved:
     <div className="entry-input-tabs" role="group" aria-label="Diary entry input method">
       <button type="button" aria-pressed={inputMode === 'TEXT'} className={inputMode === 'TEXT' ? 'is-active' : ''} onClick={() => setInputMode('TEXT')} disabled={isSaving}>Write manually</button>
       <button type="button" aria-pressed={inputMode === 'VOICE'} className={inputMode === 'VOICE' ? 'is-active' : ''} onClick={() => setInputMode('VOICE')} disabled={isSaving}>Speak instead</button>
-    </div>
-    <label className="form-field"><span>Title</span><input required maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-    <div className="voice-entry-fields">
-      <label className="form-field category-field"><span>Category</span><Select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} options={[{ value: 'Family', label: 'Family' }, { value: 'Milestones', label: 'Milestones' }, { value: 'Reflections', label: 'Reflections' }, { value: 'Lessons', label: 'Lessons' }]} /></label>
-      <label className="form-field"><span>Entry date</span><input type="date" required value={form.entryDate} onChange={(event) => setForm({ ...form, entryDate: event.target.value })} /></label>
     </div>
     {inputMode === 'TEXT' ? <label className="form-field"><span>Entry</span><textarea required rows={6} value={form.originalContent} maxLength={100000} onChange={(event) => setForm({ ...form, originalContent: event.target.value })} /></label> : <VoiceJournal transcript={transcript} onTranscriptChange={setTranscript} onTranscribed={(value) => setSourceTranscript(value)} onRecordingChange={setVoiceHasRecording} disabled={isSaving} />}
     {error && <p className="field-error" role="alert">{error}</p>}

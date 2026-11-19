@@ -108,6 +108,15 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
   type __Unused = __Check
 }
 
+// Validate ../../src/app/(dashboard)/memory-timeline/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/memory-timeline">> = Specific
+  const handler = {} as typeof import("../../src/app/(dashboard)/memory-timeline/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/(dashboard)/my-diary/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/my-diary">> = Specific

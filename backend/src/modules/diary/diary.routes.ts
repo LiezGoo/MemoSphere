@@ -3,7 +3,7 @@ import { RequestValidationError } from '../../exceptions/index.js';
 import { authenticateUser } from '../../middleware/authenticateUser.js';
 import type { AuthService } from '../auth/auth.types.js';
 import { createDiaryEntry, deleteDiaryEntry, getDiaryEntry, listDiaryEntries, updateDiaryEntry } from './diary.service.js';
-import { diaryCreateSchema, diaryListSchema, diaryUpdateSchema } from './diary.validation.js';
+import { diaryCreateSchema, diaryEmotionSchema, diaryListSchema, diaryUpdateSchema } from './diary.validation.js';
 
 export function createDiaryRouter(authService: AuthService) {
   const diaryRouter = Router();
@@ -14,6 +14,35 @@ diaryRouter.get('/entries', async (request, response, next) => {
 });
 diaryRouter.post('/entries', async (request, response, next) => {
   try { const parsed = diaryCreateSchema.safeParse(request.body); if (!parsed.success) throw new RequestValidationError(parsed.error.issues[0]?.message ?? 'Invalid diary entry.'); response.status(201).json({ success: true, data: { entry: await createDiaryEntry(request.authenticatedUserId!, parsed.data) } }); } catch (error) { next(error); }
+});
+diaryRouter.post('/entries/:id/classify-emotion', async (request, response, next) => {
+  try {
+    const parsed = diaryEmotionSchema.partial().safeParse(request.body);
+    const id = request.params.id;
+    if (typeof id !== 'string' || id.length === 0) throw new RequestValidationError('A diary entry ID is required.');
+    if (!parsed.success) throw new RequestValidationError('Choose a valid emotion.');
+    const entry = await getDiaryEntry(request.authenticatedUserId!, id);
+    if (!entry) throw new RequestValidationError('Diary entry not found.');
+    const emotion = parsed.data.emotion ?? null;
+    if (emotion) {
+      await updateDiaryEntry(request.authenticatedUserId!, id, { emotion });
+    } else {
+      const { classifyEmotion } = await import('./emotion.js');
+      const classified = await classifyEmotion(entry.content).catch(() => null);
+      await updateDiaryEntry(request.authenticatedUserId!, id, { emotion: classified });
+    }
+    response.json({ success: true, data: { entry: await getDiaryEntry(request.authenticatedUserId!, id) } });
+  } catch (error) { next(error); }
+});
+diaryRouter.patch('/entries/:id/emotion', async (request, response, next) => {
+  try {
+    const id = request.params.id;
+    if (typeof id !== 'string' || id.length === 0) throw new RequestValidationError('A diary entry ID is required.');
+    const parsed = diaryEmotionSchema.safeParse(request.body);
+    if (!parsed.success) throw new RequestValidationError('Choose a valid emotion.');
+    const entry = await updateDiaryEntry(request.authenticatedUserId!, id, { emotion: parsed.data.emotion });
+    response.json({ success: true, data: { entry } });
+  } catch (error) { next(error); }
 });
 diaryRouter.get('/entries/:id', async (request, response, next) => {
   try { response.json({ success: true, data: { entry: await getDiaryEntry(request.authenticatedUserId!, request.params.id) } }); } catch (error) { next(error); }

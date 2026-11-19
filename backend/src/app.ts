@@ -8,6 +8,7 @@ import { createAuthRouter } from './modules/auth/auth.routes.js';
 import { createAuthService } from './modules/auth/auth.service.js';
 import { createFaceRouter } from './modules/auth/face.routes.js';
 import { createDiaryRouter } from './modules/diary/diary.routes.js';
+import { createPhotoRouter } from './modules/diary/photo.routes.js';
 import { createTranscriptionRouter } from './modules/transcription/transcription.routes.js';
 import { createLifeCountdownRouter } from './modules/life-countdown/life-countdown.routes.js';
 import { createNotificationsRouter } from './modules/notifications/notifications.routes.js';
@@ -29,7 +30,15 @@ export function createApp(authService = createAuthService(createAuthRepository(p
 
   application.disable('x-powered-by');
   application.use(assignRequestId);
-  application.use(cors({ origin: environment.FRONTEND_URL, credentials: true }));
+  const allowedOrigins = new Set([
+    environment.FRONTEND_URL,
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    ...(environment.NODE_ENV !== 'production' ? ['http://localhost:3001', 'http://127.0.0.1:3001'] : []),
+  ]);
+  application.use(cors({ origin: (origin, callback) => {
+    callback(null, !origin || allowedOrigins.has(origin));
+  }, credentials: true }));
   application.use('/uploads', express.static(resolve(process.cwd(), 'public', 'uploads'), { index: false }));
   application.use(express.json({ limit: '100kb' }));
   application.get('/health', (_request, response) => {
@@ -44,6 +53,7 @@ export function createApp(authService = createAuthService(createAuthRepository(p
   application.use('/api/notifications', createNotificationsRouter(authService));
   application.use('/api/profile', createProfileRouter(authService));
   application.use('/api/diary', createDiaryRouter(authService));
+  application.use('/api/diary', createPhotoRouter(authService));
   application.use('/api/dashboard', createDashboardRouter(authService));
   application.use('/api/activity-logs', createActivityRouter(authService));
   application.use('/api/settings', createSettingsRouter(authService));

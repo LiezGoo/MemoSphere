@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 
 type DiaryDatabase = typeof prisma | Prisma.TransactionClient;
-const entryInclude = { media: true, tags: { include: { tag: true } }, versions: { orderBy: { versionNumber: 'desc' as const }, take: 1 } } satisfies Prisma.DiaryEntryInclude;
+const entryInclude = { media: true, photos: { orderBy: { position: 'asc' as const } }, tags: { include: { tag: true } }, versions: { orderBy: { versionNumber: 'desc' as const }, take: 1 } } satisfies Prisma.DiaryEntryInclude;
 
 export function listEntries(ownerId: string, filter: Prisma.DiaryEntryWhereInput, page: number, pageSize: number, sort: 'newest' | 'oldest' | 'created-newest' | 'created-oldest') {
   const orderBy = sort === 'newest' ? { entryDate: 'desc' as const } : sort === 'oldest' ? { entryDate: 'asc' as const } : { createdAt: sort === 'created-newest' ? 'desc' as const : 'asc' as const };

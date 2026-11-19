@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Activity, BookOpen, HeartHandshake, LayoutDashboard,
+  Activity, BookOpen, HeartHandshake, LayoutDashboard, Orbit,
   PenLine, ShieldCheck, UsersRound,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -24,6 +24,7 @@ const sections: { label: string; items: NavigationItem[] }[] = [
   { label: 'Main menu', items: [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'My Diary', href: '/my-diary', icon: BookOpen },
+    { label: 'Memory Timeline', href: '/memory-timeline', icon: Orbit },
     { label: 'Writing Modes', href: '/writing-modes', icon: PenLine },
   ] },
   { label: 'Personal management', items: [

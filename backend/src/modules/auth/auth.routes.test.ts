@@ -71,6 +71,18 @@ describe('authentication API', () => {
     expect(response.body.error.requestId).toBe(response.headers['x-request-id']);
   });
 
+  it('successfully signs in with valid credentials', async () => {
+    const response = await request(createApp(createFakeAuthService()))
+      .post('/api/auth/login')
+      .send({ email: user.email, password: 'CorrectPassword1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.user.email).toBe(user.email);
+    expect(response.body.data.user.passwordHash).toBeUndefined();
+    expect(response.headers['set-cookie']?.[0]).toContain('alaala_session=');
+  });
+
   it('returns 422 for invalid login fields', async () => {
     const response = await request(createApp(createFakeAuthService())).post('/api/auth/login').send({ email: 'not-an-email', password: '' });
     expect(response.status).toBe(422);
@@ -159,5 +171,16 @@ describe('authentication API', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('ACCESS_DENIED');
+  });
+
+  it('allows the development frontend on localhost port 3001', async () => {
+    const application = createApp(createFakeAuthService());
+    const loginResponse = await request(application)
+      .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3001')
+      .send({ email: user.email, password: 'CorrectPassword1' });
+
+    expect(loginResponse.status).toBe(200);
+    expect(loginResponse.headers['access-control-allow-origin']).toBe('http://localhost:3001');
   });
 });
