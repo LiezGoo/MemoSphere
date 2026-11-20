@@ -1,7 +1,6 @@
 {
-  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(dashboard)/my-diary/page": "app/(dashboard)/my-diary/page.js",
   "/(dashboard)/memory-timeline/page": "app/(dashboard)/memory-timeline/page.js",
-  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
   "/(dashboard)/writing-modes/page": "app/(dashboard)/writing-modes/page.js",
-  "/(dashboard)/my-diary/page": "app/(dashboard)/my-diary/page.js"
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js"
 }

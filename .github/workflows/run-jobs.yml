@@ -1,0 +1,19 @@
+name: Run MemoSphere scheduled jobs
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Call internal job endpoint
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 45
+          max_attempts: 2
+          retry_wait_seconds: 20
+          command: curl --fail --silent --show-error --max-time 40 -X POST -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" "${{ secrets.BACKEND_URL }}/api/internal/jobs/run"

@@ -37,6 +37,12 @@ const environmentSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().trim().min(1).optional(),
   CLOUDINARY_API_KEY: z.string().trim().min(1).optional(),
   CLOUDINARY_API_SECRET: z.string().trim().min(1).optional(),
+  BREVO_API_KEY: z.string().trim().optional(),
+  MAIL_FROM_EMAIL: z.string().email().optional(),
+  MAIL_FROM_NAME: z.string().trim().default('MemoSphere'),
+  APP_BASE_URL: z.string().url().optional(),
+  MAIL_MODE: z.enum(['send', 'log']).default('log'),
+  CRON_SECRET: z.string().trim().min(16).optional(),
   PORT: z.coerce.number().int().positive().optional(),
 });
 

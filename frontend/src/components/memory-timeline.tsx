@@ -18,7 +18,7 @@ const emotions: Array<{ value: Emotion; label: string; color: string; icon: stri
 ];
 
 const emotionInfo = (emotion: Emotion | null | undefined) =>
-  emotions.find((item) => item.value === emotion) ?? { value: 'JOY' as Emotion, label: 'Unclassified', color: '#9aa7bd', icon: '?' };
+  emotions.find((item) => item.value === emotion) ?? { value: 'JOY' as Emotion, label: 'Unclassified', color: '#9aa7bd', icon: '◇' };
 
 export default function MemoryTimeline() {
   const [entries, setEntries] = useState<ApiDiaryEntry[]>([]);
@@ -28,6 +28,7 @@ export default function MemoryTimeline() {
   const [selected, setSelected] = useState<ApiDiaryEntry | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [classificationLoading, setClassificationLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -35,6 +36,15 @@ export default function MemoryTimeline() {
     try {
       const result = await diaryService.list('?page=1&pageSize=100&sort=oldest');
       setEntries(result.entries);
+      const needsClassification = result.entries.some((entry) => !entry.emotion);
+      if (needsClassification) {
+        setClassificationLoading(true);
+        diaryService.classifyUnclassified()
+          .then(() => diaryService.list('?page=1&pageSize=100&sort=oldest'))
+          .then((refreshed) => setEntries(refreshed.entries))
+          .catch(() => undefined)
+          .finally(() => setClassificationLoading(false));
+      }
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : 'Unable to load memories.');
     } finally {
@@ -44,25 +54,29 @@ export default function MemoryTimeline() {
 
   useEffect(() => { void load(); }, []);
 
+  const dateFiltered = useMemo(() => entries.filter((entry) => {
+    if (period !== 'all') {
+      const date = new Date(entry.entryDate);
+      const now = new Date();
+      if (period === 'month' && (date.getMonth() !== now.getMonth() || date.getFullYear() !== now.getFullYear())) return false;
+      if (period === 'year' && date.getFullYear() !== now.getFullYear()) return false;
+    }
+    return true;
+  }), [entries, period]);
+
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return entries.filter((entry) => {
-      if (selectedEmotion !== 'ALL' && entry.emotion !== selectedEmotion) return false;
+    return dateFiltered.filter((entry) => {
       if (normalized && !`${entry.title} ${entry.content}`.toLowerCase().includes(normalized)) return false;
-      if (period !== 'all') {
-        const date = new Date(entry.entryDate);
-        const now = new Date();
-        if (period === 'month' && (date.getMonth() !== now.getMonth() || date.getFullYear() !== now.getFullYear())) return false;
-        if (period === 'year' && date.getFullYear() !== now.getFullYear()) return false;
-      }
+      if (selectedEmotion !== 'ALL' && entry.emotion !== selectedEmotion) return false;
       return true;
     });
-  }, [entries, period, query, selectedEmotion]);
+  }, [dateFiltered, query, selectedEmotion]);
 
   const counts = useMemo(() => Object.fromEntries(emotions.map((emotion) => [
     emotion.value,
-    entries.filter((entry) => entry.emotion === emotion.value).length,
-  ])) as Record<Emotion, number>, [entries]);
+    dateFiltered.filter((entry) => entry.emotion === emotion.value).length,
+  ])) as Record<Emotion, number>, [dateFiltered]);
   const mostFrequent = useMemo(() => {
     const ranked = emotions.map((emotion) => ({ ...emotion, count: counts[emotion.value] })).sort((a, b) => b.count - a.count);
     return ranked[0].count ? ranked[0] : null;
@@ -107,10 +121,11 @@ export default function MemoryTimeline() {
         </div>
 
         <aside className="memory-statistics" aria-label="Emotion summary">
-          <div><span>Total memories</span><strong>{entries.length}</strong></div>
+          <div><span>Total memories</span><strong>{dateFiltered.length}</strong></div>
           {emotions.map((emotion) => <div key={emotion.value} style={{ '--emotion-color': emotion.color } as CSSProperties}><span>{emotion.icon} {emotion.label}</span><strong>{counts[emotion.value]}</strong></div>)}
           <div><span>Most frequent</span><strong>{mostFrequent?.label ?? 'None yet'}</strong></div>
         </aside>
+        {classificationLoading && <p className="memory-classifying" role="status">Classifying unprocessed memories…</p>}
 
         {loading ? <div className="memory-loading">Gathering memories…</div> : error ? <div className="memory-error" role="alert">{error}</div> : visible.length === 0 ? (
           <div className="memory-empty"><Sparkles size={26} /><h2>No memories in this view</h2><p>Try another emotion or period.</p></div>

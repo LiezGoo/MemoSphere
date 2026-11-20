@@ -10,7 +10,7 @@ export const diaryListSchema = z.object({
   category: z.string().trim().max(80).optional(),
   from: dateValue.optional(),
   to: dateValue.optional(),
-  sort: z.enum(['newest', 'oldest', 'created-newest', 'created-oldest']).default('newest'),
+  sort: z.enum(['newest', 'oldest', 'created-newest', 'created-oldest', 'updated-newest', 'updated-oldest']).default('newest'),
 });
 
 export const diaryCreateSchema = z.object({

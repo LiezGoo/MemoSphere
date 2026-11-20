@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { diaryCreateSchema } from './diary.validation.js';
+import { currentEntryText } from './diary-content.js';
+import { diaryCreateSchema, diaryListSchema } from './diary.validation.js';
 
 const manualEntry = {
   originalContent: 'A memory written by hand.',
 };
 
 describe('diary create input method', () => {
+  it('returns normalized edited text instead of the original field', () => {
+    expect(currentEntryText({
+      originalContent: 'Original text',
+      normalizedContent: 'Latest edited text',
+    })).toBe('Latest edited text');
+  });
+
+  it('accepts updated-newest ordering for the saved-entry picker', () => {
+    expect(diaryListSchema.safeParse({ sort: 'updated-newest' }).success).toBe(true);
+  });
   it('creates an entry without title, category, or entry date fields', () => {
     const result = diaryCreateSchema.safeParse(manualEntry);
     expect(result.success).toBe(true);

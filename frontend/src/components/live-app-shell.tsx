@@ -36,6 +36,17 @@ function Empty({ title, message, action }: { title: string; message: string; act
   return <div className="empty-state"><div className="empty-icon"><BookOpen size={22} /></div><h3>{title}</h3><p>{message}</p>{action}</div>;
 }
 function formatDate(value: string) { return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+function formatRelativeTime(value?: string) {
+  if (!value) return 'Updated recently';
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return 'Updated just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `Updated ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Updated ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `Updated ${days}d ago`;
+}
 async function preparePhoto(file: File) {
   const image = new Image();
   image.src = URL.createObjectURL(file);
@@ -48,7 +59,7 @@ async function preparePhoto(file: File) {
   return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('This image could not be prepared.')), file.type, .86));
 }
 function LiveEntryRow({ entry, onDelete }: { entry: ApiDiaryEntry; onDelete?: (entry: ApiDiaryEntry) => void }) {
-  return <div className="entry-row"><div className="entry-date"><strong>{new Date(entry.entryDate).getDate()}</strong><span>{new Date(entry.entryDate).toLocaleString(undefined, { month: 'short' })}</span></div>{entry.photos?.[0] && <img className="entry-thumb" src={entry.photos[0].thumbnailUrl} alt="" loading="lazy" /> }<div className="entry-row-content"><div className="entry-title-line"><a href={`/my-diary?entry=${entry.id}`}>{entry.title}</a><Badge tone="slate">{entry.access}</Badge></div><p>{entry.preview || (entry.photoCount ? 'Photo entry' : '')}</p><div className="entry-meta"><span>{entry.category}</span>{entry.photoCount ? <span>· {entry.photoCount > 1 ? `+${entry.photoCount - 1} photos` : '1 photo'}</span> : null}</div></div>{onDelete ? <button className="icon-button" aria-label={`Delete ${entry.title}`} onClick={() => onDelete(entry)}><MoreHorizontal size={18} /></button> : <ArrowUpRight size={17} className="row-arrow" />}</div>;
+  return <div className="entry-row"><div className="entry-date"><strong>{new Date(entry.entryDate).getDate()}</strong><span>{new Date(entry.entryDate).toLocaleString(undefined, { month: 'short' })}</span></div>{entry.photos?.[0] && <div className="entry-thumb-wrap"><img className="entry-thumb" src={entry.photos[0].thumbnailUrl} alt={entry.photos[0].altText ?? `Photo from ${formatDate(entry.entryDate)}`} loading="lazy" />{entry.photoCount && entry.photoCount > 1 ? <span className="entry-photo-badge">+{entry.photoCount - 1}</span> : null}</div>}<div className="entry-row-content"><div className="entry-title-line"><a href={`/my-diary?entry=${entry.id}`}>{entry.title}</a></div><p>{entry.preview || (entry.photoCount ? 'Photo entry' : '')}</p><div className="entry-meta"><span>{formatDate(entry.entryDate)}</span></div></div>{onDelete ? <button className="icon-button" aria-label={`Delete ${entry.title}`} onClick={() => onDelete(entry)}><MoreHorizontal size={18} /></button> : <ArrowUpRight size={17} className="row-arrow" />}</div>;
 }
 function DashboardView({ onWrite }: { onWrite: () => void }) {
   const [data, setData] = useState<DashboardData | null>(null); const [error, setError] = useState<string | null>(null);
@@ -60,6 +71,54 @@ function DashboardView({ onWrite }: { onWrite: () => void }) {
   return <><section className="welcome-panel"><div><p className="eyebrow light">Your private workspace</p><h1>A quiet place for<br /><em>what matters.</em></h1><p>Keep the moments, lessons, and words you want to carry forward.</p><div className="welcome-actions"><Button onClick={onWrite}><Plus size={17} /> Write a diary entry</Button><a className="text-action" href="/ai-diary">Ask your assistant <ArrowUpRight size={16} /></a></div></div><div className="welcome-orbit"><div className="orbit-ring ring-one" /><div className="orbit-ring ring-two" /><BookHeart size={42} /></div></section><LifeCountdownMonitor /><div className="privacy-strip"><ShieldCheck size={19} /><div><strong>Your memories are private</strong></div><a href="/settings">Review profile <ArrowUpRight size={15} /></a></div><div className="stats-grid"><Stat icon={BookOpen} label="Diary entries" value={stats.entryCount} tone="blue" /><Stat icon={UsersRound} label="Beneficiaries" value={stats.beneficiaryCount} tone="lavender" /><Stat icon={KeyRound} label="Active policies" value={stats.activePolicyCount} tone="mint" /><Stat icon={Clock3} label="Recent activity" value={stats.recentActivityCount} tone="warm" /></div><div className="dashboard-grid"><div className="panel"><div className="panel-heading"><div><p className="eyebrow">Your memories</p><h2>Recent entries</h2></div><a className="subtle-link" href="/my-diary">View all <ArrowUpRight size={15} /></a></div><div className="entry-list">{recentEntries.length ? recentEntries.map((entry) => <LiveEntryRow key={entry.id} entry={entry} />) : <Empty title="Your diary is empty" message="Create your first entry to begin." action={<Button onClick={onWrite}><Plus size={16} /> New entry</Button>} />}</div></div><div className="panel release-panel"><div className="panel-heading"><div><p className="eyebrow">Legacy planning</p></div></div><div className="release-status"><div className="release-shield"><ShieldCheck size={23} /></div><div><strong>Authorization is server-side</strong><p>Policies and Prolog decide access.</p></div><Badge tone="blue">Verified</Badge></div><a className="subtle-link" href="/legacy-policy">Review policies <ArrowUpRight size={15} /></a></div></div></>;
 }
 function Stat({ icon: Icon, label, value, tone }: { icon: typeof BookOpen; label: string; value: number; tone: string }) { return <div className="stat-card"><div className={`stat-icon ${tone}`}><Icon size={18} /></div><p>{label}</p><strong>{value}</strong></div>; }
+function DiaryPhotoLightbox({ photos, index, entryDate, onClose, onIndex }: { photos: NonNullable<ApiDiaryEntry['photos']>; index: number; entryDate: string; onClose: () => void; onIndex: (index: number) => void }) {
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'ArrowRight') onIndex((index + 1) % photos.length);
+      if (event.key === 'ArrowLeft') onIndex((index - 1 + photos.length) % photos.length);
+      if (event.key === 'Tab') {
+        const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? []);
+        if (!controls.length) return;
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => { document.removeEventListener('keydown', keydown); previous?.focus(); };
+  }, [index, onClose, onIndex, photos.length]);
+  const photo = photos[index];
+  return <div className="dialog-backdrop lightbox-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div ref={dialog} className="diary-lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer"><button type="button" className="icon-button lightbox-close" aria-label="Close photo" onClick={onClose}><X size={20} /></button><img src={photo.fullUrl ?? photo.thumbnailUrl} alt={photo.altText ?? `Photo from ${formatDate(entryDate)}`} /><div className="lightbox-actions"><button type="button" aria-label="Previous photo" onClick={() => onIndex((index - 1 + photos.length) % photos.length)}>‹</button><span>{index + 1} / {photos.length}</span><button type="button" aria-label="Next photo" onClick={() => onIndex((index + 1) % photos.length)}>›</button></div></div></div>;
+}
+function DiaryPhoto({ photo, entryId, entryDate, onOpen }: { photo: NonNullable<ApiDiaryEntry['photos']>[number]; entryId: string; entryDate: string; onOpen: () => void }) {
+  const [src, setSrc] = useState(photo.fullUrl ?? photo.thumbnailUrl);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retried, setRetried] = useState(false);
+  const refresh = async () => {
+    setError(false);
+    setLoading(true);
+    try {
+      const fresh = await diaryService.get(entryId);
+      const match = fresh.photos?.find((item) => item.id === photo.id);
+      if (match?.fullUrl) setSrc(`${match.fullUrl}${match.fullUrl.includes('?') ? '&' : '?'}retry=${Date.now()}`);
+    } catch {
+      setError(true);
+      setLoading(false);
+    }
+  };
+  const handleError = () => {
+    if (!retried) { setRetried(true); void refresh(); }
+    else { setLoading(false); setError(true); }
+  };
+  if (error) return <div className="diary-photo-error"><span>Couldn't load this photo</span><button type="button" onClick={() => void refresh()}>Retry</button></div>;
+  return <button type="button" className="diary-photo-button" onClick={onOpen} aria-label={`Open photo: ${photo.altText ?? `Photo from ${formatDate(entryDate)}`}`}><span className={loading ? 'diary-photo-shimmer' : 'diary-photo-loaded'} /><img src={src} alt={photo.altText ?? `Photo from ${formatDate(entryDate)}`} width={photo.width} height={photo.height} loading="lazy" onLoad={() => setLoading(false)} onError={handleError} /></button>;
+}
 function DiaryEntryDialog({ entry, onClose, onSaved }: { entry: ApiDiaryEntry; onClose: () => void; onSaved: (entry: ApiDiaryEntry) => void }) {
   const [form, setForm] = useState({ content: entry.content });
   const [error, setError] = useState('');
@@ -78,7 +137,42 @@ function DiaryEntryDialog({ entry, onClose, onSaved }: { entry: ApiDiaryEntry; o
   return <div className="dialog-backdrop"><form className="dialog form-dialog" role="dialog" aria-modal="true" onSubmit={save}><button type="button" className="icon-button dialog-close" onClick={onClose} aria-label="Close"><X size={18} /></button><p className="eyebrow">Saved memory</p><h2>Edit diary entry</h2><label className="form-field"><span>Entry</span><textarea required rows={8} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} /></label><p className="field-help">Your original submitted content remains preserved in database history.</p>{error && <p className="field-error" role="alert">{error}</p>}<div className="dialog-actions"><Button type="button" variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</Button></div></form></div>;
 }
 function DiaryReadingDialog({ entry, onClose, onEdit }: { entry: ApiDiaryEntry; onClose: () => void; onEdit: () => void }) {
-  return <div className="dialog-backdrop"><article className="dialog diary-reader" role="dialog" aria-modal="true" aria-labelledby="diary-reader-title"><button type="button" className="icon-button dialog-close" aria-label="Close entry" onClick={onClose}><X size={18} /></button><h1 id="diary-reader-title">{entry.title}</h1><p className="diary-reader-meta">{entry.category} · {formatDate(entry.entryDate)}</p><div className="diary-reader-content">{entry.content}</div>{entry.photos?.length ? <div className="diary-photo-grid">{entry.photos.map((photo) => <a key={photo.id} href={photo.fullUrl ?? photo.thumbnailUrl} target="_blank" rel="noreferrer"><img src={photo.fullUrl ?? photo.thumbnailUrl} alt={photo.altText ?? 'Diary photo'} loading="lazy" /></a>)}</div> : null}<div className="dialog-actions"><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={onEdit}>Edit entry</Button></div></article></div>;
+  const dialog = useRef<HTMLElement>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (lightboxIndex !== null) return;
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'Tab') {
+        const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], textarea, input') ?? []);
+        if (!controls.length) return;
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => { document.removeEventListener('keydown', keydown); previous?.focus(); };
+  }, [lightboxIndex, onClose]);
+  const date = new Date(entry.entryDate);
+  const dateHeading = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return <>
+    <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <article ref={dialog} className="dialog diary-reader" role="dialog" aria-modal="true" aria-labelledby="diary-reader-title">
+        <button type="button" className="icon-button dialog-close" aria-label="Close entry" onClick={onClose}><X size={18} /></button>
+        <h1 id="diary-reader-title">{dateHeading}</h1>
+        <p className="diary-reader-time">{time}</p>
+        <div className="diary-reader-content">{entry.content}</div>
+        {entry.photos?.length ? <div className="diary-photo-grid">{entry.photos.map((photo, index) => <DiaryPhoto key={photo.id} photo={photo} entryId={entry.id} entryDate={entry.entryDate} onOpen={() => setLightboxIndex(index)} />)}</div> : null}
+        <div className="dialog-actions"><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={onEdit}>Edit entry</Button></div>
+      </article>
+    </div>
+    {lightboxIndex !== null && entry.photos?.length ? <DiaryPhotoLightbox photos={entry.photos} index={lightboxIndex} entryDate={entry.entryDate} onClose={() => setLightboxIndex(null)} onIndex={setLightboxIndex} /> : null}
+  </>;
 }
 function DiaryView({ initialQuery = '', showSearch = false }: { initialQuery?: string; showSearch?: boolean }) {
   const [entries, setEntries] = useState<ApiDiaryEntry[]>([]); const [query, setQuery] = useState(initialQuery); const [total, setTotal] = useState(0); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [target, setTarget] = useState<ApiDiaryEntry | null>(null); const [selected, setSelected] = useState<ApiDiaryEntry | null>(null); const [selectedError, setSelectedError] = useState<string | null>(null);
@@ -135,7 +229,7 @@ function DiaryView({ initialQuery = '', showSearch = false }: { initialQuery?: s
       {createError && <p className="field-error" role="alert">{createError}</p>}<div className="diary-composer-foot"><span>Enter for a new line · Ctrl/Cmd + Enter to save</span>{(draft.originalContent.trim() || photos.length > 0) && <button type="button" onClick={() => void createEntry()} disabled={saving || photos.some((photo) => photo.progress < 100 && !photo.error)}>{saving ? 'Saving…' : 'Save diary entry'}</button>}</div>
     </div>
     {showSearch && <div className="diary-history-toolbar"><label className="search-input"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search entries" /></label><span>{total} {total === 1 ? 'entry' : 'entries'}</span></div>}
-    {error ? <StateMessage title="Diary unavailable" message={error} retry={load} /> : loading ? <div className="diary-skeleton" role="status" aria-label="Loading diary entries"><i /><i /><i /></div> : !entries.length ? <div className="diary-history"><section><h2>Your entries {!showSearch && <span className="diary-entry-count">{total} {total === 1 ? 'entry' : 'entries'}</span>}</h2><p className="diary-empty">Your saved moments will find a home here.</p></section></div> : <div className="diary-history">{Object.entries(groups).sort(([a], [b]) => { const order = [...groupOrder, ...Object.keys(groups).filter((key) => !groupOrder.includes(key))]; return order.indexOf(a) - order.indexOf(b); }).map(([group, items], index) => <section key={group}><h2>{group}{!showSearch && index === 0 && <span className="diary-entry-count">{total} {total === 1 ? 'entry' : 'entries'}</span>}</h2>{items.map((entry) => <article className="diary-history-row" key={entry.id}><a href={`/my-diary?entry=${entry.id}`}><strong>{entry.title}</strong><span>{entry.preview}</span><small>{entry.category} · {formatDate(entry.entryDate)}</small></a><button type="button" className="diary-row-menu" aria-label={`Archive ${entry.title}`} onClick={() => setTarget(entry)}><MoreHorizontal size={18} /></button></article>)}</section>)}</div>}
+    {error ? <StateMessage title="Diary unavailable" message={error} retry={load} /> : loading ? <div className="diary-skeleton" role="status" aria-label="Loading diary entries"><i /><i /><i /></div> : !entries.length ? <div className="diary-history"><section><h2>Your entries {!showSearch && <span className="diary-entry-count">{total} {total === 1 ? 'entry' : 'entries'}</span>}</h2><p className="diary-empty">Your saved moments will find a home here.</p></section></div> : <div className="diary-history">{Object.entries(groups).sort(([a], [b]) => { const order = [...groupOrder, ...Object.keys(groups).filter((key) => !groupOrder.includes(key))]; return order.indexOf(a) - order.indexOf(b); }).map(([group, items], index) => <section key={group}><h2>{group}{!showSearch && index === 0 && <span className="diary-entry-count">{total} {total === 1 ? 'entry' : 'entries'}</span>}</h2>{items.map((entry) => <article className="diary-history-row" key={entry.id}>{entry.photos?.[0] ? <div className="diary-row-thumb"><img src={entry.photos[0].thumbnailUrl} alt={entry.photos[0].altText ?? `Photo from ${formatDate(entry.entryDate)}`} loading="lazy" />{entry.photoCount && entry.photoCount > 1 ? <span>+{entry.photoCount - 1}</span> : null}</div> : null}<a href={`/my-diary?entry=${entry.id}`}><strong>{entry.title}</strong><span>{entry.preview || (entry.photoCount ? 'Photo entry' : '')}</span><small>{formatDate(entry.entryDate)}</small></a><button type="button" className="diary-row-menu" aria-label={`Archive ${entry.title}`} onClick={() => setTarget(entry)}><MoreHorizontal size={18} /></button></article>)}</section>)}</div>}
     {target && <div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true"><div className="dialog-icon"><Trash2 size={20} /></div><h2>Archive this entry?</h2><p>The original remains preserved in database history.</p><div className="dialog-actions"><Button variant="secondary" onClick={() => setTarget(null)}>Cancel</Button><Button variant="danger" onClick={remove}>Archive</Button></div></div></div>}{selectedError && <StateMessage title="Entry unavailable" message={selectedError} />}{selected && (editing ? <DiaryEntryDialog entry={selected} onClose={() => setEditing(false)} onSaved={(updated) => { setSelected(updated); setEditing(false); setEntries((current) => current.map((item) => item.id === updated.id ? updated : item)); }} /> : <DiaryReadingDialog entry={selected} onClose={() => setSelected(null)} onEdit={() => setEditing(true)} />)}</section>;
 }
 function BeneficiaryView() {
@@ -158,10 +252,29 @@ function BeneficiaryView() {
   };
 
   useEffect(() => { void load(); }, []);
+  const [toast, setToast] = useState('');
+  const [resendingId, setResendingId] = useState('');
+  const resend = async (person: { id: string }) => {
+    setResendingId(person.id); setToast('');
+    try { await legacyPolicyService.resendInvitation(person.id); setToast('Invitation email sent.'); }
+    catch (reason) { setToast(reason instanceof ApiError ? reason.message : 'Unable to resend invitation.'); }
+    finally { setResendingId(''); }
+  };
 
-  return <><SectionHeading eyebrow="People you trust" title="Beneficiaries" description="" action={<Button onClick={() => setShowForm(true)}><Plus size={17} /> Add beneficiary</Button>} />{error ? <StateMessage title="Beneficiaries unavailable" message={error} retry={() => { void load(); }} /> : loading ? <div className="panel loading-state" role="status">Loading beneficiaries...</div> : <div className="beneficiary-grid">{records.length ? records.map((person) => <div className="panel beneficiary-card" key={person.id}><div className="person-avatar">{person.fullName.split(' ').map((part) => part[0]).join('')}</div><h2>{person.fullName}</h2><p>{person.relationship} · {person.email}</p><Badge tone={person.status === 'VERIFIED' ? 'green' : 'amber'}>{person.status}</Badge></div>) : <div className="panel"><Empty title="No beneficiaries" message="Add a beneficiary." /></div>}</div>}{showForm && <BeneficiaryForm onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); void load(); }} />}</>;
+  return <><SectionHeading eyebrow="People you trust" title="Beneficiaries" description="" action={<Button onClick={() => setShowForm(true)}><Plus size={17} /> Add beneficiary</Button>} />{error ? <StateMessage title="Beneficiaries unavailable" message={error} retry={() => { void load(); }} /> : loading ? <div className="panel loading-state" role="status">Loading beneficiaries...</div> : <div className="beneficiary-grid">{records.length ? records.map((person) => <div className="panel beneficiary-card" key={person.id}><div className="person-avatar">{person.fullName.split(' ').map((part) => part[0]).join('')}</div><h2>{person.fullName}</h2><p>{person.relationship} · {person.email}</p><Badge tone={person.status === 'VERIFIED' ? 'green' : person.status === 'DECLINED' ? 'slate' : 'amber'}>{person.status.charAt(0) + person.status.slice(1).toLowerCase()}</Badge>{person.status !== 'VERIFIED' && <Button variant="secondary" disabled={resendingId === person.id} onClick={() => void resend(person)}>{resendingId === person.id ? 'Sending…' : 'Resend invitation'}</Button>}</div>) : <div className="panel"><Empty title="No beneficiaries" message="Add a beneficiary." /></div>}</div>}{toast && <p className="field-help" role="status">{toast}</p>}{showForm && <BeneficiaryForm onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); setToast('Invitation email sent.'); void load(); }} />}</>;
 }
-function BeneficiaryForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) { const [form, setForm] = useState({ fullName: '', email: '', relationship: '' }); const [error, setError] = useState(''); const submit = async () => { try { await beneficiaryService.create(form); onSaved(); } catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to save beneficiary.'); } }; return <div className="dialog-backdrop"><div className="dialog form-dialog" role="dialog" aria-modal="true"><button className="icon-button dialog-close" onClick={onClose} aria-label="Close"><X size={18} /></button><p className="eyebrow">New beneficiary</p><h2>Add someone you trust</h2>{(['fullName', 'email', 'relationship'] as const).map((field) => <label className="form-field" key={field}><span>{field === 'fullName' ? 'Full name' : field === 'email' ? 'Email address' : 'Relationship'}</span><input type={field === 'email' ? 'email' : 'text'} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>)}{error && <p className="field-error">{error}</p>}<div className="dialog-actions"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={submit}>Send invitation</Button></div></div></div>; }
+function BeneficiaryForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({ fullName: '', email: '', relationship: '' });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async () => {
+    setSubmitting(true); setError('');
+    try { await beneficiaryService.create(form); onSaved(); }
+    catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to send invitation.'); }
+    finally { setSubmitting(false); }
+  };
+  return <div className="dialog-backdrop"><div className="dialog form-dialog" role="dialog" aria-modal="true"><button className="icon-button dialog-close" onClick={onClose} aria-label="Close"><X size={18} /></button><p className="eyebrow">New beneficiary</p><h2>Add someone you trust</h2>{(['fullName', 'email', 'relationship'] as const).map((field) => <label className="form-field" key={field}><span>{field === 'fullName' ? 'Full name' : field === 'email' ? 'Email address' : 'Relationship'}</span><input required type={field === 'email' ? 'email' : 'text'} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>)}{error && <p className="field-error" role="alert">{error}</p>}<div className="dialog-actions"><Button variant="secondary" onClick={onClose} disabled={submitting}>Cancel</Button><Button onClick={submit} disabled={submitting}>{submitting ? 'Sending…' : 'Send invitation'}</Button></div></div></div>;
+}
 function PolicyView() {
   const [policies, setPolicies] = useState<LegacyPolicy[]>([]); const [beneficiaries, setBeneficiaries] = useState<LegacyBeneficiary[]>([]);
   const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [dialog, setDialog] = useState(false); const [editing, setEditing] = useState<LegacyPolicy | null>(null); const [menu, setMenu] = useState<string | null>(null); const [logs, setLogs] = useState<Awaited<ReturnType<typeof legacyPolicyService.audit>> | null>(null); const [formError, setFormError] = useState(''); const [busy, setBusy] = useState(false);
@@ -172,47 +285,171 @@ function PolicyView() {
   useEffect(() => { if (!dialog && !logs) return; const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setDialog(false); setLogs(null); setMenu(null); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [dialog, logs]);
   const startCreate = () => { setEditing(null); setForm({ name: '', description: '', beneficiaryId: beneficiaries.find((b) => b.status !== 'REVOKED')?.id ?? '', scopeType: 'all_entries', scopeCategories: 'Reflections', entryIds: '', scopeDateFrom: '', scopeDateTo: '', excludedEntryIds: '', releaseMethod: 'owner_manual', releaseAt: '', verifierBeneficiaryId: '', coolingOffDays: '7', expiresAt: '' }); setFormError(''); setDialog(true); };
   const startEdit = (policy: LegacyPolicy) => { setEditing(policy); setForm({ name: policy.name, description: policy.description ?? '', beneficiaryId: policy.beneficiaryId, scopeType: policy.scopeType, scopeCategories: policy.scopeCategories?.join(', ') ?? '', entryIds: policy.entryLinks.map((l) => l.entryId).join(', '), scopeDateFrom: policy.scopeDateFrom?.slice(0, 10) ?? '', scopeDateTo: policy.scopeDateTo?.slice(0, 10) ?? '', excludedEntryIds: policy.excludedEntryIds.join(', '), releaseMethod: policy.releaseMethod, releaseAt: policy.releaseAt?.slice(0, 10) ?? '', verifierBeneficiaryId: '', coolingOffDays: String(policy.coolingOffDays), expiresAt: policy.expiresAt?.slice(0, 10) ?? '' }); setFormError(''); setDialog(true); };
-  const save = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); setFormError(''); const payload = { name: form.name, description: form.description || null, beneficiaryId: form.beneficiaryId, scopeType: form.scopeType, scopeCategories: form.scopeType === 'categories' ? form.scopeCategories.split(',').map((x) => x.trim()).filter(Boolean) : undefined, entryIds: form.scopeType === 'selected_entries' ? form.entryIds.split(',').map((x) => x.trim()).filter(Boolean) : undefined, scopeDateFrom: form.scopeDateFrom || null, scopeDateTo: form.scopeDateTo || null, excludedEntryIds: form.excludedEntryIds.split(',').map((x) => x.trim()).filter(Boolean), releaseMethod: form.releaseMethod, releaseAt: form.releaseAt || null, verifierBeneficiaryId: form.releaseMethod === 'trusted_verifier' ? form.verifierBeneficiaryId : null, coolingOffDays: Number(form.coolingOffDays), expiresAt: form.expiresAt || null }; try { if (editing) await legacyPolicyService.update(editing.id, payload); else await legacyPolicyService.create(payload); setDialog(false); await load(); } catch (reason) { setFormError(reason instanceof ApiError ? reason.message : 'Unable to save the policy.'); } finally { setBusy(false); } };
+  const save = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); setFormError(''); const payload = { name: form.name, description: form.description || null, beneficiaryId: form.beneficiaryId, scopeType: form.scopeType, scopeCategories: form.scopeType === 'categories' ? form.scopeCategories.split(',').map((x) => x.trim()).filter(Boolean) : undefined, entryIds: form.scopeType === 'selected_entries' ? form.entryIds.split(',').map((x) => x.trim()).filter(Boolean) : undefined, scopeDateFrom: form.scopeDateFrom || null, scopeDateTo: form.scopeDateTo || null, excludedEntryIds: form.excludedEntryIds.split(',').map((x) => x.trim()).filter(Boolean), releaseMethod: form.releaseMethod, releaseAt: form.releaseAt ? `${form.releaseAt}T00:00:00.000Z` : null, verifierBeneficiaryId: form.releaseMethod === 'trusted_verifier' ? form.verifierBeneficiaryId : null, coolingOffDays: Number(form.coolingOffDays), expiresAt: form.expiresAt || null }; try { if (editing) await legacyPolicyService.update(editing.id, payload); else await legacyPolicyService.create(payload); setDialog(false); await load(); } catch (reason) { setFormError(reason instanceof ApiError ? reason.message : 'Unable to save the policy.'); } finally { setBusy(false); } };
   const activate = async (policy: LegacyPolicy) => { const password = window.prompt(`Re-enter your password to activate “${policy.name}”.`); if (!password) return; try { await legacyPolicyService.activate(policy.id, password); await load(); } catch (reason) { window.alert(reason instanceof ApiError ? reason.message : 'Unable to activate policy.'); } };
   const revoke = async (policy: LegacyPolicy) => { if (!window.confirm(`Revoke “${policy.name}” immediately? This cannot be undone.`)) return; const password = window.prompt(`Re-enter your password to revoke “${policy.name}”.`); if (!password) return; try { await legacyPolicyService.revoke(policy.id, password); await load(); } catch (reason) { window.alert(reason instanceof ApiError ? reason.message : 'Unable to revoke policy.'); } };
   const requestRelease = async (policy: LegacyPolicy) => { const password = policy.releaseMethod === 'owner_manual' ? window.prompt(`Re-enter your password to request release of “${policy.name}”.`) : undefined; if (policy.releaseMethod === 'owner_manual' && !password) return; try { await legacyPolicyService.requestRelease(policy.id, password || undefined); await load(); } catch (reason) { window.alert(reason instanceof ApiError ? reason.message : 'Unable to request release.'); } };
   const addBeneficiary = async () => { try { const result = await legacyPolicyService.createBeneficiary(beneficiaryForm); const record = result.beneficiary; setBeneficiaries((all) => [record, ...all]); setForm((current) => ({ ...current, beneficiaryId: record.id })); setNewBeneficiary(false); setBeneficiaryForm({ fullName: '', email: '', relationship: '' }); } catch (reason) { setFormError(reason instanceof ApiError ? reason.message : 'Unable to add beneficiary.'); } };
   const scopeSummary = (policy: LegacyPolicy) => { const base = policy.scopeType === 'categories' ? `Categories: ${policy.scopeCategories?.join(', ') ?? 'None'}` : policy.scopeType === 'selected_entries' ? `${policy.entryLinks.length} selected entries` : 'All shareable entries'; const dates = policy.scopeDateFrom || policy.scopeDateTo ? ` · ${policy.scopeDateFrom ? new Date(policy.scopeDateFrom).toLocaleDateString() : 'Any date'} to ${policy.scopeDateTo ? new Date(policy.scopeDateTo).toLocaleDateString() : 'present'}` : ''; return `${base}${dates}${policy.excludedEntryIds.length ? ` · ${policy.excludedEntryIds.length} excluded` : ''}`; };
+  const postpone = async (policy: LegacyPolicy) => {
+    const next = window.prompt('New release date (YYYY-MM-DD)', policy.releaseAt?.slice(0, 10) ?? '');
+    if (!next) return;
+    try { await legacyPolicyService.postpone(policy.id, `${next}T00:00:00.000Z`); await load(); }
+    catch (reason) { setFormError(reason instanceof ApiError ? reason.message : 'Unable to postpone this policy.'); }
+  };
   return <><SectionHeading eyebrow="Legacy Policy Language" title="Access policies" description="Choose what a beneficiary may read and when access can be released." action={<Button onClick={startCreate}><Plus size={16} /> Create policy</Button>} /><div className="policy-banner"><ShieldCheck size={21} /><div><strong>The browser never grants access or decides beneficiary permissions.</strong></div></div>
-    {loading ? <div className="panel policy-list" role="status" aria-label="Loading policies"><div className="diary-skeleton"><i /><i /><i /></div></div> : error ? <StateMessage title="Policies unavailable" message={error} retry={() => void load()} /> : policies.length === 0 ? <div className="panel policy-list"><Empty title="No policies yet" message="Create a policy to define what a verified beneficiary may access." action={<Button onClick={startCreate}><Plus size={16} /> Create policy</Button>} /></div> : <div className="policy-grid">{policies.map((policy) => <article className="panel policy-card" key={policy.id}><div className="policy-card-heading"><div><h2>{policy.name}</h2><span className={`badge badge-${policy.status === 'ACTIVE' || policy.status === 'RELEASED' ? 'green' : 'slate'}`}>{policy.status.toLowerCase()}</span></div><div className="policy-menu-wrap"><button className="icon-button" aria-label={`Actions for ${policy.name}`} aria-expanded={menu === policy.id} onClick={() => setMenu(menu === policy.id ? null : policy.id)}><MoreHorizontal size={18} /></button>{menu === policy.id && <div className="policy-menu">{['DRAFT', 'PAUSED'].includes(policy.status) && <button onClick={() => { setMenu(null); startEdit(policy); }}>Edit</button>}{policy.status === 'ACTIVE' ? <button onClick={async () => { setMenu(null); await legacyPolicyService.pause(policy.id); await load(); }}>Pause</button> : ['DRAFT', 'PAUSED'].includes(policy.status) ? <button onClick={() => { setMenu(null); void activate(policy); }} disabled={policy.beneficiary.status !== 'VERIFIED'}>Activate</button> : null}{policy.status !== 'REVOKED' && <button onClick={() => { setMenu(null); void revoke(policy); }}>Revoke</button>}<button onClick={async () => { setMenu(null); setLogs(await legacyPolicyService.audit(policy.id)); }}>View audit log</button></div>}</div></div><p className="policy-beneficiary">{policy.beneficiary.fullName} · {policy.beneficiary.email}</p><dl><div><dt>Scope</dt><dd>{scopeSummary(policy)}</dd></div><div><dt>Release</dt><dd>{policy.releaseMethod.replaceAll('_', ' ')} · {policy.coolingOffDays}-day wait</dd></div>{policy.releaseReadyAt && <div><dt>Cooling off until</dt><dd>{new Date(policy.releaseReadyAt).toLocaleString()}</dd></div>}</dl>{policy.status === 'ACTIVE' && policy.releaseReadyAt && <Button variant="secondary" onClick={async () => { await legacyPolicyService.cancelRelease(policy.id); await load(); }}>Cancel pending release</Button>}{policy.status === 'ACTIVE' && !policy.releaseReadyAt && policy.releaseMethod !== 'scheduled_date' && <Button variant="secondary" onClick={() => void requestRelease(policy)}>Request release</Button>}</article>)}</div>}
+    {loading ? <div className="panel policy-list" role="status" aria-label="Loading policies"><div className="diary-skeleton"><i /><i /><i /></div></div> : error ? <StateMessage title="Policies unavailable" message={error} retry={() => void load()} /> : policies.length === 0 ? <div className="panel policy-list"><Empty title="No policies yet" message="Create a policy to define what a verified beneficiary may access." action={<Button onClick={startCreate}><Plus size={16} /> Create policy</Button>} /></div> : <div className="policy-grid">{policies.map((policy) => <article className="panel policy-card" key={policy.id}><div className="policy-card-heading"><div><h2>{policy.name}</h2><span className={`badge badge-${policy.status === 'ACTIVE' || policy.status === 'RELEASED' ? 'green' : 'slate'}`}>{policy.status.toLowerCase()}</span></div><div className="policy-menu-wrap"><button className="icon-button" aria-label={`Actions for ${policy.name}`} aria-expanded={menu === policy.id} onClick={() => setMenu(menu === policy.id ? null : policy.id)}><MoreHorizontal size={18} /></button>{menu === policy.id && <div className="policy-menu">{['DRAFT', 'PAUSED'].includes(policy.status) && <button onClick={() => { setMenu(null); startEdit(policy); }}>Edit</button>}{policy.status === 'ACTIVE' ? <button onClick={async () => { setMenu(null); await legacyPolicyService.pause(policy.id); await load(); }}>Pause</button> : ['DRAFT', 'PAUSED'].includes(policy.status) ? <button onClick={() => { setMenu(null); void activate(policy); }} disabled={policy.beneficiary.status !== 'VERIFIED'}>Activate</button> : null}{policy.status !== 'REVOKED' && <button onClick={() => { setMenu(null); void revoke(policy); }}>Revoke</button>}<button onClick={async () => { setMenu(null); setLogs(await legacyPolicyService.audit(policy.id)); }}>View audit log</button></div>}</div></div><p className="policy-beneficiary">{policy.beneficiary.fullName} · {policy.beneficiary.email}</p>    <dl><div><dt>Scope</dt><dd>{scopeSummary(policy)}</dd></div><div><dt>Release</dt><dd>{policy.releaseMethod.replaceAll('_', ' ')} · {policy.coolingOffDays}-day wait</dd></div>{policy.releaseReadyAt && <div><dt>Cooling off until</dt><dd>{new Date(policy.releaseReadyAt).toLocaleString()}</dd></div>}{policy.releaseMethod === 'scheduled_date' && policy.releaseAt && <div><dt>Next release</dt><dd>{new Date(policy.releaseAt).toLocaleString()}</dd></div>}</dl>{['ACTIVE','PAUSED','DRAFT'].includes(policy.status) && policy.releaseMethod === 'scheduled_date' && policy.releaseAt && <div className="policy-inline-beneficiary"><Button variant="secondary" onClick={() => void postpone(policy)}>Postpone</Button>{policy.status !== 'DRAFT' && <Button variant="secondary" onClick={() => void revoke(policy)}>Cancel</Button>}</div>}{policy.status === 'ACTIVE' && policy.releaseReadyAt && <Button variant="secondary" onClick={async () => { await legacyPolicyService.cancelRelease(policy.id); await load(); }}>Cancel pending release</Button>}{policy.status === 'ACTIVE' && !policy.releaseReadyAt && policy.releaseMethod !== 'scheduled_date' && <Button variant="secondary" onClick={() => void requestRelease(policy)}>Request release</Button>}</article>)}</div>}
     {dialog && <div className="dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setDialog(false); }}><form className="dialog form-dialog policy-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="policy-editor-title" onSubmit={save}><button type="button" className="icon-button dialog-close" onClick={() => setDialog(false)} aria-label="Close policy editor"><X size={18} /></button><p className="eyebrow">Access policy</p><h2 id="policy-editor-title">{editing ? 'Edit policy' : 'Create policy'}</h2>
       <label className="form-field"><span>Policy name</span><input required maxLength={150} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label className="form-field"><span>Beneficiary</span><Select required value={form.beneficiaryId} onChange={(e) => setForm({ ...form, beneficiaryId: e.target.value })} options={[{ value: '', label: 'Choose a beneficiary', placeholder: true }, ...beneficiaries.filter((b) => b.status !== 'REVOKED' && b.status !== 'REMOVED').map((b) => ({ value: b.id, label: `${b.fullName} · ${b.status.toLowerCase()}` }))]} /></label><button type="button" className="subtle-link" onClick={() => setNewBeneficiary(!newBeneficiary)}>+ Add beneficiary</button>{newBeneficiary && <div className="policy-inline-beneficiary"><label className="form-field"><span>Name</span><input value={beneficiaryForm.fullName} onChange={(e) => setBeneficiaryForm({ ...beneficiaryForm, fullName: e.target.value })} /></label><label className="form-field"><span>Email</span><input type="email" value={beneficiaryForm.email} onChange={(e) => setBeneficiaryForm({ ...beneficiaryForm, email: e.target.value })} /></label><label className="form-field"><span>Relationship</span><input value={beneficiaryForm.relationship} onChange={(e) => setBeneficiaryForm({ ...beneficiaryForm, relationship: e.target.value })} /></label><Button type="button" variant="secondary" onClick={() => void addBeneficiary()}>Save beneficiary</Button><small>Invite delivery is not configured. This beneficiary must be verified before activation.</small></div>}
       <h3>What can they see?</h3><label className="form-field"><span>Scope</span><Select value={form.scopeType} onChange={(e) => setForm({ ...form, scopeType: e.target.value })} options={[{ value: 'all_entries', label: 'All shareable entries' }, { value: 'categories', label: 'Selected categories' }, { value: 'selected_entries', label: 'Selected entries (IDs)' }]} /></label>{form.scopeType === 'categories' && <label className="form-field"><span>Categories (comma separated)</span><input value={form.scopeCategories} onChange={(e) => setForm({ ...form, scopeCategories: e.target.value })} /></label>}{form.scopeType === 'selected_entries' && <label className="form-field"><span>Entry IDs (comma separated)</span><input value={form.entryIds} onChange={(e) => setForm({ ...form, entryIds: e.target.value })} /></label>}<label className="form-field"><span>Excluded entry IDs (optional)</span><input value={form.excludedEntryIds} onChange={(e) => setForm({ ...form, excludedEntryIds: e.target.value })} /></label><div className="policy-inline-beneficiary"><label className="form-field"><span>From date (optional)</span><input type="date" value={form.scopeDateFrom} onChange={(e) => setForm({ ...form, scopeDateFrom: e.target.value })} /></label><label className="form-field"><span>Through date (optional)</span><input type="date" value={form.scopeDateTo} onChange={(e) => setForm({ ...form, scopeDateTo: e.target.value })} /></label></div>
       <h3>When can it be released?</h3><label className="form-field"><span>Release method</span><Select value={form.releaseMethod} onChange={(e) => setForm({ ...form, releaseMethod: e.target.value })} options={[{ value: 'owner_manual', label: 'Owner confirms release' }, { value: 'scheduled_date', label: 'Scheduled date' }, { value: 'trusted_verifier', label: 'Trusted verifier' }]} /></label>{form.releaseMethod === 'scheduled_date' && <label className="form-field"><span>Release date</span><input type="date" value={form.releaseAt} onChange={(e) => setForm({ ...form, releaseAt: e.target.value })} required /></label>}{form.releaseMethod === 'trusted_verifier' && <label className="form-field"><span>Verified trusted beneficiary</span><Select value={form.verifierBeneficiaryId} onChange={(e) => setForm({ ...form, verifierBeneficiaryId: e.target.value })} options={[{ value: '', label: 'Choose verifier', placeholder: true }, ...beneficiaries.filter((b) => b.status === 'VERIFIED').map((b) => ({ value: b.id, label: b.fullName }))]} /></label>}<label className="form-field"><span>Cooling-off days (minimum 3)</span><input type="number" min={3} max={365} value={form.coolingOffDays} onChange={(e) => setForm({ ...form, coolingOffDays: e.target.value })} /></label><label className="form-field"><span>Access expires (optional)</span><input type="date" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} /></label>
-      <p className="policy-summary">{form.name || 'This policy'} will let {beneficiaries.find((b) => b.id === form.beneficiaryId)?.fullName || 'the beneficiary'} read {form.scopeType === 'categories' ? `${form.scopeCategories} entries` : form.scopeType === 'selected_entries' ? 'the selected entries' : 'shareable entries'} after {form.releaseMethod.replaceAll('_', ' ')} and a {form.coolingOffDays}-day waiting period. You can cancel release during the waiting period.</p>{formError && <p className="field-error" role="alert">{formError}</p>}<div className="dialog-actions"><Button type="button" variant="secondary" onClick={() => setDialog(false)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Save draft'}</Button></div></form></div>}
+      <p className="policy-summary">{form.releaseMethod === 'scheduled_date' && form.releaseAt ? `On ${new Date(`${form.releaseAt}T00:00:00`).toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}), ${beneficiaries.find((b) => b.id === form.beneficiaryId)?.fullName || 'the beneficiary'} will be emailed a link. You'll get reminders ${form.coolingOffDays} days before and 1 day before, and you can postpone or cancel any time.` : `${form.name || 'This policy'} will let ${beneficiaries.find((b) => b.id === form.beneficiaryId)?.fullName || 'the beneficiary'} read ${form.scopeType === 'categories' ? `${form.scopeCategories} entries` : form.scopeType === 'selected_entries' ? 'the selected entries' : 'shareable entries'} after ${form.releaseMethod.replaceAll('_', ' ')} and a ${form.coolingOffDays}-day waiting period. You can cancel release during the waiting period.`}</p>{formError && <p className="field-error" role="alert">{formError}</p>}<div className="dialog-actions"><Button type="button" variant="secondary" onClick={() => setDialog(false)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Save draft'}</Button></div></form></div>}
     {logs && <div className="dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setLogs(null); }}><div className="dialog policy-audit-dialog" role="dialog" aria-modal="true" aria-labelledby="policy-audit-title"><button type="button" className="icon-button dialog-close" onClick={() => setLogs(null)} aria-label="Close audit log"><X size={18} /></button><p className="eyebrow">Security history</p><h2 id="policy-audit-title">Audit log</h2>{logs.length ? <ol>{logs.map((log) => <li key={log.id}><strong>{log.action.replaceAll('_', ' ').toLowerCase()}</strong><span>{new Date(log.createdAt).toLocaleString()}</span></li>)}</ol> : <p>No audit events recorded.</p>}</div></div>}
   </>;
 }
 function ActivityView() { const [items, setItems] = useState<Array<{ id: string; action: string; resourceType: string; result: string; createdAt: string }>>([]); const [error, setError] = useState(''); useEffect(() => { activityService.list().then((result) => setItems(result.activities)).catch((reason) => setError(reason instanceof ApiError ? reason.message : 'Unable to load activity.')); }, []); return <><SectionHeading eyebrow="A clear record" title="Activity logs" description="Security events retrieved from your owner-scoped audit log." />{error ? <StateMessage title="Activity unavailable" message={error} /> : <div className="panel activity-panel"><div className="activity-table"><div className="table-head"><span>Activity</span><span>Resource</span><span>Result</span><span>Date</span></div>{items.length ? items.map((item) => <div className="table-row" key={item.id}><div className="activity-action"><span className="activity-icon"><Check size={14} /></span><strong>{item.action}</strong></div><span>{item.resourceType}</span><Badge tone={item.result === 'ALLOWED' ? 'green' : 'amber'}>{item.result}</Badge><span>{formatDate(item.createdAt)}</span></div>) : <Empty title="No activity yet" message="Important account actions will appear here." />}</div></div>}</>; }
 function AssistantView() { return <><SectionHeading eyebrow="Your diary companion" title="Chat with Memo" description="Choose a companion or explore memories from your own diary." /><AIChatPanel /></>; }
 function WritingView() {
-  const [entry, setEntry] = useState<ApiDiaryEntry | null>(null);
+  const [text, setText] = useState('');
   const [mode, setMode] = useState<'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'>('LIGHT_FIX');
-  const [output, setOutput] = useState('');
+  const [instruction, setInstruction] = useState('');
   const [consent, setConsent] = useState(false);
+  const [output, setOutput] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
+  const [highlight, setHighlight] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { diaryService.list('?page=1&pageSize=1&sort=newest').then((result) => setEntry(result.entries[0] ?? null)).catch((reason) => setError(reason instanceof ApiError ? reason.message : 'Unable to load the diary entry.')); }, []);
+  const [picker, setPicker] = useState(false);
+  const [entries, setEntries] = useState<ApiDiaryEntry[]>([]);
+  const [search, setSearch] = useState('');
+  const [sourceEntry, setSourceEntry] = useState<ApiDiaryEntry | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [selectingEntryId, setSelectingEntryId] = useState('');
+  const editor = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const grow = () => { if (editor.current) { editor.current.style.height = 'auto'; editor.current.style.height = `${Math.min(editor.current.scrollHeight, 420)}px`; } };
+    grow();
+  }, [text]);
+  useEffect(() => {
+    if (!text) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [text]);
+  const openPicker = async () => {
+    setPicker(true);
+    setPickerLoading(true);
+    setEntries([]);
+    try {
+      const result = await diaryService.list('?page=1&pageSize=100&sort=updated-newest');
+      setEntries(result.entries);
+    } catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to load saved entries.'); }
+    finally { setPickerLoading(false); }
+  };
+  const chooseSavedEntry = async (id: string) => {
+    setSelectingEntryId(id);
+    setError('');
+    try {
+      const latest = await diaryService.get(id);
+      setText(latest.content || latest.normalizedContent || latest.originalContent);
+      setSourceEntry(latest);
+      setPicker(false);
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : 'Unable to load the latest entry text.');
+    } finally {
+      setSelectingEntryId('');
+    }
+  };
+  const friendlyError = (reason: unknown) => {
+    if (reason instanceof ApiError) {
+      if (reason.status === 429) return 'Try again in a minute';
+      if (/no suggested|empty response|returned no/i.test(reason.message)) return 'Gemini returned an empty response. Please retry.';
+      if (/blocked|safety/i.test(reason.message)) return 'The model blocked this text. Please revise it and retry.';
+      if (reason.status === 502) return 'The model could not process this text. Please retry.';
+      if (reason.status === 503) return 'Gemini is unavailable. Please retry.';
+      return reason.message;
+    }
+    return 'Network failure. Check your connection and retry.';
+  };
   const process = async () => {
-    if (!entry) return;
+    if (!text.trim() || (mode !== 'VERBATIM' && !consent)) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setProcessing(true); setError('');
     try {
-      const result = await writingModeService.process({ diaryEntryId: entry.id, mode, content: entry.originalContent, consentToGemini: mode !== 'VERBATIM' ? consent : undefined });
-      setOutput(result.version.processedContent);
-    } catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to process this writing mode.'); } finally { setProcessing(false); }
+      const result = await writingModeService.process({
+        mode,
+        text,
+        instruction: instruction.trim() || undefined,
+        consent: mode !== 'VERBATIM' ? consent : undefined,
+        consentToGemini: mode !== 'VERBATIM' ? consent : undefined,
+      }, controller.signal);
+      const next = result.text ?? result.version.processedContent;
+      if (!next?.trim()) { setError('Gemini returned an empty response. Please retry.'); return; }
+      setOutput(next);
+      setHistory((current) => [next, ...current.filter((item) => item !== next)].slice(0, 3));
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === 'AbortError') setError('Processing cancelled.');
+      else setError(friendlyError(reason));
+    } finally { setProcessing(false); abortRef.current = null; }
   };
-  const accept = async () => {
-    if (!entry || !output) return;
-    setProcessing(true); setError('');
-    try { const updated = await diaryService.update(entry.id, { content: output }); setEntry(updated); setOutput(''); }
-    catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to accept this revision.'); } finally { setProcessing(false); }
+  const saveNew = async () => {
+    if (!output.trim()) return;
+    setSaving(true); setError('');
+    try { await diaryService.create({ originalContent: output, inputMethod: 'TEXT' }); setOutput(''); setHistory([]); setSourceEntry(null); setText(''); }
+    catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to save as a new entry.'); }
+    finally { setSaving(false); }
   };
-  return <><SectionHeading eyebrow="Preserve your voice" title="Writing modes" description="" /><div className="panel writing-editor"><div className="editor-top"><strong>{entry?.title ?? 'No diary entries available'}</strong><Select aria-label="Writing mode" value={mode} onChange={(event) => { setMode(event.target.value as typeof mode); setOutput(''); setError(''); }} disabled={processing} options={[{ value: 'VERBATIM', label: 'Verbatim' }, { value: 'LIGHT_FIX', label: 'Light Fix' }, { value: 'REVIEW', label: 'Review' }]} /></div><div className="comparison"><div><span className="field-label">Original</span><textarea className="writing-textarea" value={entry?.originalContent ?? ''} readOnly /></div>{output && <div><span className="field-label">Suggestion - accept or edit before using</span><textarea className="writing-textarea" value={output} onChange={(event) => setOutput(event.target.value)} /></div>}</div>{mode !== 'VERBATIM' && <label className="voice-gemini-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} disabled={processing} /> I consent to sending this diary text to Google Gemini.</label>}<Button onClick={() => void process()} disabled={!entry || processing || (mode !== 'VERBATIM' && !consent)}>{processing ? 'Processing...' : mode === 'VERBATIM' ? 'Preview verbatim' : 'Generate Gemini suggestion'}</Button>{output && <div className="voice-comparison-actions"><Button variant="secondary" onClick={() => setOutput('')}>Reject</Button><Button onClick={() => void accept()} disabled={processing}>Accept revised text</Button></div>}{error && <p className="field-error" role="alert">{error}</p>}</div></>;
+  const saveRevision = async () => {
+    if (!sourceEntry || !output.trim()) return;
+    setSaving(true); setError('');
+    try {
+      await writingModeService.saveRevision(sourceEntry.id, {
+        writingMode: mode,
+        sourceContent: text,
+        processedContent: output,
+        processingNotes: mode === 'VERBATIM' ? null : `Gemini ${mode === 'LIGHT_FIX' ? 'light-fix' : 'review'} revision.`,
+      });
+      setOutput('');
+      setHistory([]);
+    } catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to save this revision.'); }
+    finally { setSaving(false); }
+  };
+  const appendInstruction = (chip: string) => setInstruction((current) => current ? `${current}${current.endsWith('.') ? ' ' : ', '}${chip}` : chip);
+  const visibleEntries = entries.filter((entry) => `${entry.title} ${entry.preview}`.toLowerCase().includes(search.toLowerCase()));
+  const description = mode === 'VERBATIM'
+    ? 'Preserves the text exactly.'
+    : mode === 'LIGHT_FIX'
+      ? 'Fixes spelling, grammar, punctuation, and minor sentence structure while preserving your tone.'
+      : 'Improves flow and clarity, organizes paragraphs, and suggests clearer construction while preserving meaning.';
+  const changedWords = highlight ? output.split(/(\s+)/).map((word, index) => text.includes(word) ? word : <mark key={index}>{word}</mark>) : output;
+  return <>
+    <SectionHeading eyebrow="Preserve your voice" title="Writing modes" description="Type freely, choose guidance, and decide what to do with the result." />
+    <div className="writing-layout">
+      <section className="panel writing-input-panel" aria-labelledby="writing-text-heading">
+        <div className="editor-top"><strong id="writing-text-heading">Your text</strong><span className="character-count">{text.length.toLocaleString()} / 10,000</span></div>
+        <textarea ref={editor} className="writing-textarea writing-input" maxLength={10000} value={text} onChange={(event) => setText(event.target.value)} placeholder="Type or paste what you want to improve…" aria-label="Your text" />
+        <div className="writing-input-actions"><Button variant="secondary" onClick={() => { setText(''); setSourceEntry(null); }}>Clear</Button><Button variant="secondary" onClick={() => void openPicker()}>Start from a saved entry</Button></div>
+        {sourceEntry && <p className="field-help">Copy from: {sourceEntry.title}. Editing this copy will not change the saved entry.</p>}
+        <label className="form-field writing-instruction"><span>Tell Memo what to change <em>(optional)</em></span><input maxLength={200} value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Describe the change you want" /><small>{instruction.length}/200</small></label>
+        <div className="writing-chips" aria-label="Suggested instructions">{['Fix structure', 'Improve wording', 'Make it shorter', 'Keep my tone'].map((chip) => <button type="button" key={chip} onClick={() => appendInstruction(chip)}>{chip}</button>)}</div>
+        <div className="writing-mode-row"><label><span className="field-label">Mode</span><Select aria-label="Writing mode" value={mode} onChange={(event) => { setMode(event.target.value as typeof mode); setError(''); }} disabled={processing} options={[{ value: 'VERBATIM', label: 'Verbatim' }, { value: 'LIGHT_FIX', label: 'Light Fix' }, { value: 'REVIEW', label: 'Review' }]} /></label><p className="writing-mode-description" aria-live="polite">{description}</p></div>
+        {mode !== 'VERBATIM' && <label className="voice-gemini-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} disabled={processing} /> <span>I consent to sending this diary text to Google Gemini. <a href="#what-is-sent" onClick={(event) => event.preventDefault()}>What is sent?</a></span></label>}
+        {mode !== 'VERBATIM' && <p id="what-is-sent" className="field-help">Only the text, selected mode, and optional instruction are sent. Photos, titles, and other entries are not sent.</p>}
+        <Button className="writing-process" onClick={() => void process()} disabled={!text.trim() || processing || (mode !== 'VERBATIM' && !consent)}>{processing ? 'Processing…' : 'Process'}</Button>
+        {processing && <div className="writing-processing" role="status" aria-live="polite"><span>Memo is working…</span><Button variant="secondary" onClick={() => abortRef.current?.abort()}>Cancel</Button></div>}
+      </section>
+      <section className="panel writing-result-panel" aria-labelledby="writing-result-heading" aria-live="polite">
+        <div className="editor-top"><strong id="writing-result-heading">Result</strong>{output && <label className="writing-highlight"><input type="checkbox" checked={highlight} onChange={(event) => setHighlight(event.target.checked)} /> Highlight changes</label>}</div>
+        {output ? <><textarea className="writing-textarea writing-output" value={output} onChange={(event) => setOutput(event.target.value)} aria-label="Editable result" />{highlight && <div className="writing-highlight-preview" aria-label="Change highlights">{changedWords}</div>}<div className="writing-result-actions"><Button variant="secondary" onClick={async () => { try { await navigator.clipboard.writeText(output); } catch { setError('Unable to copy. Select the result and copy it manually.'); } }}>Copy</Button><Button variant="secondary" onClick={() => void process()} disabled={!text.trim() || processing || (mode !== 'VERBATIM' && !consent)}>Process again</Button></div><div className="writing-save-actions"><Button onClick={() => void saveNew()} disabled={saving}>Save as new entry</Button>{sourceEntry && <Button variant="secondary" onClick={() => void saveRevision()} disabled={saving}>Save as revision of this entry</Button>}<Button variant="secondary" onClick={() => { setOutput(''); setHistory([]); }}>Discard</Button></div></> : <p className="writing-empty">Your result will appear here.</p>}
+        {history.length > 0 && <div className="writing-history"><span>Recent results</span>{history.map((item, index) => <button type="button" key={`${item.slice(0,20)}-${index}`} onClick={() => setOutput(item)}>{item.slice(0, 42)}{item.length > 42 ? '…' : ''}</button>)}</div>}
+      </section>
+    </div>
+    {error && <p className="field-error writing-error" role="alert">{error}{error.includes('retry') || error.includes('Retry') || error.includes('minute') || error.includes('network') || error.includes('unavailable') ? <button type="button" onClick={() => void process()} disabled={processing}>Retry</button> : null}</p>}
+    {picker && <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPicker(false); }}><div className="dialog writing-entry-picker" role="dialog" aria-modal="true" aria-labelledby="entry-picker-title"><button type="button" className="icon-button dialog-close" aria-label="Close saved entry picker" onClick={() => setPicker(false)}><X size={18} /></button><h2 id="entry-picker-title">Choose a saved entry</h2><label className="form-field"><span>Search</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search entries" /></label><div className="writing-entry-list" aria-live="polite">{pickerLoading ? <p className="field-help">Loading saved entries…</p> : visibleEntries.map((entry) => <button type="button" key={entry.id} disabled={Boolean(selectingEntryId)} onClick={() => void chooseSavedEntry(entry.id)}><strong>{entry.title}</strong><span>{entry.preview || 'Photo entry'}</span><small>{selectingEntryId === entry.id ? 'Loading latest text…' : formatRelativeTime(entry.updatedAt)} · {formatDate(entry.entryDate)}</small></button>)}</div></div></div>}
+  </>;
 }
 function SettingsView() { const [fullName, setFullName] = useState(''); const [email, setEmail] = useState(''); const [message, setMessage] = useState(''); useEffect(() => { settingsService.getProfile().then((result) => { const data = result as { user: { fullName: string; email: string } }; setFullName(data.user.fullName); setEmail(data.user.email); }).catch(() => setMessage('Unable to load profile.')); }, []); const save = async () => { try { await settingsService.updateProfile({ fullName }); setMessage('Profile saved.'); } catch (reason) { setMessage(reason instanceof ApiError ? reason.message : 'Unable to save profile.'); } }; return <><SectionHeading eyebrow="Make MemoSphere yours" title="Settings" description="" action={<Button onClick={save}><Check size={16} /> Save changes</Button>} /><div className="panel settings-section"><div className="form-grid"><label className="form-field"><span>Full name</span><input value={fullName} onChange={(event) => setFullName(event.target.value)} /></label><label className="form-field"><span>Email address</span><input value={email} readOnly /></label></div>{message && <p className="field-help">{message}</p>}</div></>; }
 function CreateEntryDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {

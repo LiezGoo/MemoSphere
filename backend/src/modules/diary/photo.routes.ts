@@ -31,7 +31,9 @@ export function createPhotoRouter(authService: AuthService) {
   });
   router.delete('/photos/:id', async (request, response, next) => {
     try {
-      const photo = await prisma.entryPhoto.findFirst({ where: { id: request.params.id, ownerId: request.authenticatedUserId! } });
+      const photo = await prisma.entryPhoto.findFirst({
+        where: { id: request.params.id, entry: { owner: { userId: request.authenticatedUserId! }, status: { not: 'DELETED' } } },
+      });
       if (!photo) throw new ResourceNotFound('Photo not found.');
       await deleteCloudinaryAsset(photo.cloudinaryPublicId);
       await prisma.entryPhoto.delete({ where: { id: photo.id } });

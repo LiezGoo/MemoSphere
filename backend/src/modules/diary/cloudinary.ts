@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { v2 as cloudinary } from 'cloudinary';
 import { environment } from '../../config/environment.js';
 import { InputValidationError, ServiceUnavailableError } from '../../exceptions/index.js';
 
@@ -14,8 +14,7 @@ function config(): CloudinaryConfig {
   return { cloudName, apiKey, apiSecret };
 }
 function signature(params: Record<string, string | number>, secret: string) {
-  const value = Object.entries(params).filter(([, item]) => item !== '').sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${key}=${item}`).join('&');
-  return createHash('sha1').update(`${value}${secret}`).digest('hex');
+  return cloudinary.utils.api_sign_request(params, secret);
 }
 function folder(userId: string) { return `memosphere/diary/${userId}`; }
 function assertPublicId(userId: string, publicId: string) {
@@ -33,10 +32,13 @@ export function createPhotoUploadSignature(userId: string, requestedCount: numbe
 export async function verifyCloudinaryAsset(userId: string, publicId: string): Promise<CloudinaryAsset> {
   assertPublicId(userId, publicId);
   const cloud = config();
-  const auth = Buffer.from(`${cloud.apiKey}:${cloud.apiSecret}`).toString('base64');
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloud.cloudName}/resources/authenticated/image/${encodeURIComponent(publicId)}`, { headers: { Authorization: `Basic ${auth}` } });
-  if (!response.ok) throw new InputValidationError('The uploaded photo could not be verified.');
-  const asset = await response.json() as CloudinaryAsset;
+  cloudinary.config({ cloud_name: cloud.cloudName, api_key: cloud.apiKey, api_secret: cloud.apiSecret, secure: true });
+  let asset: CloudinaryAsset;
+  try {
+    asset = await cloudinary.api.resource(publicId, { resource_type: 'image', type: 'authenticated' }) as CloudinaryAsset;
+  } catch {
+    throw new InputValidationError('The uploaded photo could not be verified.');
+  }
   const format = asset.format.toLowerCase();
   if (asset.type !== 'authenticated' || asset.resource_type !== 'image' || !allowedFormats.has(format) || asset.bytes > MAX_BYTES || asset.width < 1 || asset.height < 1) throw new InputValidationError('The uploaded photo is not a supported image within the size limit.');
   return asset;
@@ -44,17 +46,25 @@ export async function verifyCloudinaryAsset(userId: string, publicId: string): P
 
 export async function deleteCloudinaryAsset(publicId: string) {
   const cloud = config();
-  const timestamp = Math.floor(Date.now() / 1000);
-  const params = { public_id: publicId, timestamp, type: 'authenticated' };
-  const body = new URLSearchParams(Object.entries({ ...params, api_key: cloud.apiKey, signature: signature(params, cloud.apiSecret) }).map(([key, value]) => [key, String(value)]));
-  await fetch(`https://api.cloudinary.com/v1_1/${cloud.cloudName}/destroy`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  cloudinary.config({ cloud_name: cloud.cloudName, api_key: cloud.apiKey, api_secret: cloud.apiSecret, secure: true });
+  await cloudinary.uploader.destroy(publicId, { resource_type: 'image', type: 'authenticated', invalidate: true });
 }
 
 export function signedCloudinaryUrl(publicId: string, transformation: string) {
   const cloud = config();
-  const path = `${transformation}/${publicId}`;
-  const signatureValue = createHash('sha1').update(`${path}${cloud.apiSecret}`).digest('hex').slice(0, 8);
-  return `https://res.cloudinary.com/${cloud.cloudName}/image/authenticated/s--${signatureValue}--/${path}`;
+  cloudinary.config({ cloud_name: cloud.cloudName, api_key: cloud.apiKey, api_secret: cloud.apiSecret, secure: true });
+  const parsed = transformation === 'c_fill,w_240,h_240,q_auto,f_auto'
+    ? { crop: 'fill', width: 240, height: 240, quality: 'auto', fetch_format: 'auto' }
+    : transformation === 'c_fill,w_480,h_480,q_auto,f_auto'
+      ? { crop: 'fill', width: 480, height: 480, quality: 'auto', fetch_format: 'auto' }
+      : { crop: 'limit', width: 2000, height: 2000, quality: 'auto', fetch_format: 'auto' };
+  return cloudinary.url(publicId, {
+    type: 'authenticated',
+    sign_url: true,
+    secure: true,
+    resource_type: 'image',
+    transformation: [parsed],
+  });
 }
 
 export { MAX_BYTES };

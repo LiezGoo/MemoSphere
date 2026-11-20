@@ -24,6 +24,7 @@ import { createWritingRouter } from './modules/writing/writing.routes.js';
 import { createAIRouter } from './modules/ai/ai.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { assignRequestId } from './middleware/requestId.js';
+import { runLegacyJob, verifyCronSecret } from './modules/legacy/legacy-jobs.js';
 
 export function createApp(authService = createAuthService(createAuthRepository(prisma))) {
   const application = express();
@@ -63,6 +64,14 @@ export function createApp(authService = createAuthService(createAuthRepository(p
   application.use('/api/letter-of-wishes', createWishesRouter(authService));
   application.use('/api/diary/writing-modes', createWritingRouter(authService));
   application.use('/api/ai', createAIRouter(authService));
+  application.post('/api/internal/jobs/run', async (request, response) => {
+    if (!verifyCronSecret(request.get('x-cron-secret'))) {
+      response.status(401).json({ success: false, error: { message: 'Unauthorized.' } });
+      return;
+    }
+    const result = await runLegacyJob();
+    response.json({ success: true, data: result });
+  });
   application.use(errorHandler);
   return application;
 }

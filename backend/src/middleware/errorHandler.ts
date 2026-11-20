@@ -14,7 +14,12 @@ export const errorHandler: ErrorRequestHandler = (error, request, response, next
     return;
   }
 
-  const details = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : { name: typeof error, message: String(error) };
+  const diagnostic = typeof error === 'object' && error !== null
+    ? Object.fromEntries(['code', 'clientVersion'].filter((key) => key in error).map((key) => [key, (error as Record<string, unknown>)[key]]))
+    : {};
+  const details = error instanceof Error
+    ? { name: error.name, message: error.message, stack: error.stack, ...diagnostic }
+    : { name: typeof error, message: String(error), ...diagnostic };
   console.error(JSON.stringify({ level: 'error', requestId, route: `${request.method} ${request.originalUrl.split('?')[0]}`, error: details }));
   response.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.', requestId } });
 };

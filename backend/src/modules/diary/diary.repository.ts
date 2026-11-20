@@ -4,8 +4,16 @@ import { prisma } from '../../config/prisma.js';
 type DiaryDatabase = typeof prisma | Prisma.TransactionClient;
 const entryInclude = { media: true, photos: { orderBy: { position: 'asc' as const } }, tags: { include: { tag: true } }, versions: { orderBy: { versionNumber: 'desc' as const }, take: 1 } } satisfies Prisma.DiaryEntryInclude;
 
-export function listEntries(ownerId: string, filter: Prisma.DiaryEntryWhereInput, page: number, pageSize: number, sort: 'newest' | 'oldest' | 'created-newest' | 'created-oldest') {
-  const orderBy = sort === 'newest' ? { entryDate: 'desc' as const } : sort === 'oldest' ? { entryDate: 'asc' as const } : { createdAt: sort === 'created-newest' ? 'desc' as const : 'asc' as const };
+export function listEntries(ownerId: string, filter: Prisma.DiaryEntryWhereInput, page: number, pageSize: number, sort: 'newest' | 'oldest' | 'created-newest' | 'created-oldest' | 'updated-newest' | 'updated-oldest') {
+  const orderBy = sort === 'newest'
+    ? { entryDate: 'desc' as const }
+    : sort === 'oldest'
+      ? { entryDate: 'asc' as const }
+      : sort === 'updated-newest'
+        ? { updatedAt: 'desc' as const }
+        : sort === 'updated-oldest'
+          ? { updatedAt: 'asc' as const }
+          : { createdAt: sort === 'created-newest' ? 'desc' as const : 'asc' as const };
   return Promise.all([
     prisma.diaryEntry.findMany({ where: { ownerId, ...filter }, include: entryInclude, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
     prisma.diaryEntry.count({ where: { ownerId, ...filter } }),

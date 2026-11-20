@@ -8,6 +8,12 @@ import type { z } from 'zod';
 import { diaryCreateSchema, diaryListSchema, diaryUpdateSchema } from './diary.validation.js';
 import { deleteCloudinaryAsset, signedCloudinaryUrl, verifyCloudinaryAsset } from './cloudinary.js';
 import { classifyEmotion } from './emotion.js';
+import { currentEntryText } from './diary-content.js';
+
+function entryTitle(content: string, photoCount: number) {
+  const firstLine = content.split(/\r?\n/).find((line) => line.trim())?.trim();
+  return firstLine?.slice(0, 200) || (photoCount ? 'Photo entry' : 'Diary memory');
+}
 
 function contentHash(previousHash: string | undefined, title: string, content: string, entryDate: Date) {
   return createHash('sha256').update([previousHash ?? 'GENESIS', title, content, entryDate.toISOString()].join('|')).digest('hex');
@@ -15,15 +21,15 @@ function contentHash(previousHash: string | undefined, title: string, content: s
 
 function toEntry(entry: Awaited<ReturnType<typeof findEntry>>) {
   if (!entry) return null;
-  const content = entry.normalizedContent ?? entry.originalContent;
-  return { ...entry, content, media: entry.media.map((media) => ({ ...media, byteSize: media.byteSize.toString() })), photos: entry.photos.map((photo) => ({ ...photo, thumbnailUrl: signedCloudinaryUrl(photo.cloudinaryPublicId, 'c_fill,w_480,h_480,q_auto,f_auto'), fullUrl: signedCloudinaryUrl(photo.cloudinaryPublicId, 'c_limit,w_2000,h_2000,q_auto,f_auto') })), preview: content.slice(0, 180), access: 'Private', mediaCount: entry.media.length, photoCount: entry.photos.length, latestVersion: entry.versions.at(-1) ?? null };
+  const content = currentEntryText(entry);
+  return { ...entry, title: entryTitle(content, entry.photos.length), content, media: entry.media.map((media) => ({ ...media, byteSize: media.byteSize.toString() })), photos: entry.photos.map((photo) => ({ ...photo, thumbnailUrl: signedCloudinaryUrl(photo.cloudinaryPublicId, 'c_fill,w_480,h_480,q_auto,f_auto'), fullUrl: signedCloudinaryUrl(photo.cloudinaryPublicId, 'c_limit,w_2000,h_2000,q_auto,f_auto') })), preview: content.replace(/^\s+/, '').slice(0, 180), access: 'Private', mediaCount: entry.media.length, photoCount: entry.photos.length, latestVersion: entry.versions.at(-1) ?? null };
 }
 
 export async function listDiaryEntries(userId: string, input: z.infer<typeof diaryListSchema>) {
   const owner = await getOwnerForUser(userId);
   const filter = { status: { not: 'DELETED' as const }, ...(input.search ? { OR: [{ title: { contains: input.search } }, { originalContent: { contains: input.search } }, { normalizedContent: { contains: input.search } }] } : {}), ...(input.category ? { category: input.category } : {}), ...(input.from || input.to ? { entryDate: { ...(input.from ? { gte: input.from } : {}), ...(input.to ? { lte: input.to } : {}) } } : {}) };
   const [entries, total] = await listEntries(owner.id, filter, input.page, input.pageSize, input.sort);
-  return { entries: entries.map((entry) => { const content = entry.normalizedContent ?? entry.originalContent; return { ...entry, content, media: entry.media.map((media) => ({ ...media, byteSize: media.byteSize.toString() })), photos: entry.photos.map((photo) => ({ ...photo, thumbnailUrl: signedCloudinaryUrl(photo.cloudinaryPublicId, 'c_fill,w_240,h_240,q_auto,f_auto') })), preview: content.slice(0, 180), access: 'Private', mediaCount: entry.media.length, photoCount: entry.photos.length }; }), pagination: { page: input.page, pageSize: input.pageSize, total, totalPages: Math.ceil(total / input.pageSize) } };
+  return { entries: entries.map((entry) => { const content = currentEntryText(entry); return { ...entry, title: entryTitle(content, entry.photos.length), content, media: entry.media.map((media) => ({ ...media, byteSize: media.byteSize.toString() })), photos: entry.photos.map((photo) => ({ ...photo, thumbnailUrl: signedCloudinaryUrl(photo.cloudinaryPublicId, 'c_fill,w_240,h_240,q_auto,f_auto') })), preview: content.replace(/^\s+/, '').slice(0, 180), access: 'Private', mediaCount: entry.media.length, photoCount: entry.photos.length }; }), pagination: { page: input.page, pageSize: input.pageSize, total, totalPages: Math.ceil(total / input.pageSize) } };
 }
 
 export async function getDiaryEntry(userId: string, id: string) {
@@ -38,13 +44,14 @@ export async function createDiaryEntry(userId: string, input: z.infer<typeof dia
   const originalContent = input.originalContent.trim();
   const assets = await Promise.all(input.photoPublicIds.map((id) => verifyCloudinaryAsset(userId, id)));
   const previous = await findLatestEntry(owner.id);
-  const fallbackTitle = 'Diary memory';
+  const fallbackTitle = entryTitle(originalContent, assets.length);
   const fallbackDate = new Date();
-  const emotion = originalContent ? await classifyEmotion(originalContent).catch(() => null) : null;
+  const emotionResult = originalContent ? await classifyEmotion(originalContent).catch(() => null) : null;
+  const emotion = emotionResult?.emotion ?? null;
   const hash = contentHash(previous?.contentHash, fallbackTitle, originalContent, fallbackDate);
   const entry = await prisma.$transaction(async (transaction) => {
-    const created = await createEntry({ owner: { connect: { id: owner.id } }, title: input.title.trim() || fallbackTitle, category: input.category, originalContent, transcript: input.transcript, inputMethod: input.inputMethod, emotion, entryDate: fallbackDate, contentHash: hash, previousHash: previous?.contentHash, status: 'PRESERVED', versions: originalContent ? { create: { versionNumber: 1, writingMode: 'VERBATIM', sourceContent: originalContent, processedContent: originalContent } } : undefined, photos: assets.length ? { create: assets.map((asset, position) => ({ ownerId: owner.id, cloudinaryPublicId: asset.public_id, width: asset.width, height: asset.height, bytes: asset.bytes, position })) } : undefined }, transaction);
-    const title = input.title.trim() || `Memory · ${created.createdAt.toISOString().slice(0, 10)}`;
+    const created = await createEntry({ owner: { connect: { id: owner.id } }, title: input.title.trim() || fallbackTitle, category: input.category, originalContent, transcript: input.transcript, inputMethod: input.inputMethod, emotion, emotionConfidence: emotionResult?.confidence ?? null, emotionReason: emotionResult?.reason ?? null, emotionSource: emotionResult?.emotion ? 'AI' : null, emotionUpdatedAt: emotionResult?.emotion ? fallbackDate : null, entryDate: fallbackDate, contentHash: hash, previousHash: previous?.contentHash, status: 'PRESERVED', versions: originalContent ? { create: { versionNumber: 1, writingMode: 'VERBATIM', sourceContent: originalContent, processedContent: originalContent } } : undefined, photos: assets.length ? { create: assets.map((asset, position) => ({ ownerId: owner.id, cloudinaryPublicId: asset.public_id, width: asset.width, height: asset.height, bytes: asset.bytes, position })) } : undefined }, transaction);
+    const title = input.title.trim() || fallbackTitle;
     await updateEntry(created.id, { title, entryDate: created.createdAt, contentHash: contentHash(previous?.contentHash, title, originalContent, created.createdAt) }, transaction);
     await recordAudit({ ownerId: owner.id, actorUserId: userId, action: 'DIARY_ENTRY_CREATED', resourceType: 'DIARY_ENTRY', resourceId: created.id, result: 'ALLOWED' }, transaction);
     return created;

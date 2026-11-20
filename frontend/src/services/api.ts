@@ -83,15 +83,16 @@ export const faceAuthService = {
 };
 
 export const diaryService = {
-  list: (query = '') => apiRequest<{ success: true; data: { entries: ApiDiaryEntry[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } } }>(`/api/diary/entries${query}`).then((result) => result.data),
+  list: (query = '') => apiRequest<{ success: true; data: { entries: ApiDiaryEntry[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } } }>(`/api/diary/entries${query}`, { cache: 'no-store' }).then((result) => result.data),
   create: (payload: unknown) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>('/api/diary/entries', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data.entry),
-  get: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}`).then((result) => result.data.entry),
+  get: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}`, { cache: 'no-store' }).then((result) => result.data.entry),
   update: (id: string, payload: unknown) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) }).then((result) => result.data.entry),
   remove: (id: string) => apiRequest(`/api/diary/entries/${id}`, { method: 'DELETE' }),
   photoSignature: (count: number) => apiRequest<{ success: true; data: { cloudName: string; apiKey: string; timestamp: number; folder: string; type: string; transformation: string; signature: string } }>('/api/diary/upload-signature', { method: 'POST', body: JSON.stringify({ count }) }).then((result) => result.data),
   discardPhoto: (publicId: string) => apiRequest(`/api/diary/photos/unattached`, { method: 'DELETE', body: JSON.stringify({ publicId }) }),
   setEmotion: (id: string, emotion: 'JOY' | 'SADNESS' | 'ANGER' | 'FEAR' | 'DISGUST' | 'ANXIETY') => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/emotion`, { method: 'PATCH', body: JSON.stringify({ emotion }) }).then((result) => result.data.entry),
   classifyEmotion: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/classify-emotion`, { method: 'POST', body: JSON.stringify({}) }).then((result) => result.data.entry),
+  classifyUnclassified: () => apiRequest<{ success: true; data: { classified: number; failed: number; remaining: number } }>('/api/diary/classify-unclassified', { method: 'POST', body: '{}' }).then((result) => result.data),
 };
 
 export async function uploadDiaryPhoto(file: Blob, name: string, onProgress: (progress: number) => void) {
@@ -129,7 +130,7 @@ export const assistantService = {
 
 export const beneficiaryService = {
   list: () => apiRequest<{ success: true; data: { beneficiaries: Beneficiary[] } }>('/api/beneficiaries').then((result) => result.data),
-  create: (payload: unknown) => apiRequest('/api/beneficiaries', { method: 'POST', body: JSON.stringify(payload) }),
+  create: (payload: unknown) => apiRequest<{ success: true; data: { beneficiary: Beneficiary; delivery: string } }>('/api/beneficiaries', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
   remove: (id: string) => apiRequest(`/api/beneficiaries/${id}`, { method: 'DELETE' }),
 };
 
@@ -142,6 +143,7 @@ export const policyService = {
 export const legacyPolicyService = {
   listBeneficiaries: () => apiRequest<{ success: true; data: { beneficiaries: LegacyBeneficiary[] } }>('/api/legacy/beneficiaries').then((r) => r.data.beneficiaries),
   createBeneficiary: (payload: unknown) => apiRequest<{ success: true; data: { beneficiary: LegacyBeneficiary; delivery: string } }>('/api/legacy/beneficiaries', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data),
+  resendInvitation: (id: string) => apiRequest<{ success: true; data: { delivery: string } }>(`/api/legacy/beneficiaries/${id}/invite`, { method: 'POST', body: '{}' }).then((r) => r.data),
   list: () => apiRequest<{ success: true; data: { policies: LegacyPolicy[] } }>('/api/legacy/policies').then((r) => r.data.policies),
   create: (payload: unknown) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>('/api/legacy/policies', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data.policy),
   update: (id: string, payload: unknown) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }).then((r) => r.data.policy),
@@ -150,12 +152,19 @@ export const legacyPolicyService = {
   revoke: (id: string, password: string) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}/revoke`, { method: 'POST', body: JSON.stringify({ password }) }).then((r) => r.data.policy),
   requestRelease: (id: string, password?: string) => apiRequest<{ success: true; data: { policy?: LegacyPolicy; message?: string } }>(`/api/legacy/policies/${id}/release-request`, { method: 'POST', body: JSON.stringify(password ? { password } : {}) }).then((r) => r.data),
   cancelRelease: (id: string) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}/release-cancel`, { method: 'POST' }).then((r) => r.data.policy),
+  postpone: (id: string, releaseAt: string) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>(`/api/legacy/policies/${id}/postpone`, { method: 'POST', body: JSON.stringify({ releaseAt }) }).then((r) => r.data.policy),
   remove: (id: string) => apiRequest<void>(`/api/legacy/policies/${id}`, { method: 'DELETE' }),
   audit: (id: string) => apiRequest<{ success: true; data: { logs: { id: string; action: string; actorType: string; createdAt: string; metadata: unknown }[] } }>(`/api/legacy/audit?policy_id=${encodeURIComponent(id)}`).then((r) => r.data.logs),
 };
 
+export const legacyVerificationService = {
+  verifyInvitation: (token: string, action: 'verify' | 'decline') => apiRequest(`/api/legacy/beneficiaries/verify`, { method: 'POST', body: JSON.stringify({ token, action }) }),
+  verifyRelease: (token: string) => apiRequest(`/api/legacy/release/verify`, { method: 'POST', body: JSON.stringify({ token }) }),
+};
+
 export const writingModeService = {
-  process: (payload: { diaryEntryId?: string; mode: 'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'; content: string; consentToGemini?: boolean }) => apiRequest<{ success: true; data: { version: { processedContent: string; processingNotes: string | null }; persisted?: boolean } }>('/api/diary/writing-modes/process', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
+  process: (payload: { diaryEntryId?: string; mode: 'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'; content?: string; text?: string; instruction?: string; consentToGemini?: boolean; consent?: boolean }, signal?: AbortSignal) => apiRequest<{ success: true; data: { text?: string; version: { processedContent: string; processingNotes: string | null }; persisted?: boolean } }>('/api/diary/writing-modes/process', { method: 'POST', body: JSON.stringify(payload), signal }).then((result) => result.data),
+  saveRevision: (entryId: string, payload: { writingMode: 'VERBATIM' | 'LIGHT_FIX' | 'REVIEW'; sourceContent: string; processedContent: string; processingNotes?: string | null }) => apiRequest<{ success: true; data: { version: unknown } }>(`/api/diary/writing-modes/entries/${entryId}/revisions`, { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
 };
 
 export const transcriptionService = {

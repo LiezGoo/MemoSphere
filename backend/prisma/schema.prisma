@@ -268,6 +268,10 @@ model DiaryEntry {
   deletedAt         DateTime?
   neverShare        Boolean           @default(false)
   emotion           Emotion?
+  emotionConfidence Float?
+  emotionReason     String? @db.VarChar(300)
+  emotionSource     String? @db.VarChar(20)
+  emotionUpdatedAt  DateTime?
   owner             Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   versions          EntryVersion[]
   media             MediaAsset[]
@@ -283,15 +287,15 @@ model DiaryEntry {
 
 model EntryPhoto {
   id                  String     @id @default(cuid())
-  entryId             String
-  ownerId             String
-  cloudinaryPublicId  String     @unique @db.VarChar(512)
+  entryId             String     @map("entry_id")
+  ownerId             String     @map("owner_id")
+  cloudinaryPublicId  String     @unique @map("cloudinary_public_id") @db.VarChar(512)
   width               Int
   height              Int
   bytes               Int
-  altText             String?    @db.VarChar(200)
+  altText             String?    @map("alt_text") @db.VarChar(200)
   position            Int        @default(0)
-  createdAt           DateTime   @default(now())
+  createdAt           DateTime   @default(now()) @map("created_at")
   entry               DiaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
   @@index([entryId, position])
@@ -357,6 +361,9 @@ model Beneficiary {
   relationship  String?           @db.VarChar(80)
   status        BeneficiaryStatus @default(INVITED)
   verifiedAt    DateTime?
+  invitationTokenHash String? @db.VarChar(64)
+  invitationExpiresAt DateTime?
+  invitationUsedAt DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   owner         Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -439,6 +446,8 @@ model LegacyAuditLog {
 model LegacyReleaseToken {
   id        String   @id @default(cuid())
   policyId  String
+  kind      String   @default("release") @db.VarChar(20)
+  beneficiaryId String?
   tokenHash String   @unique @db.VarChar(64)
   expiresAt DateTime
   usedAt    DateTime?
@@ -446,8 +455,26 @@ model LegacyReleaseToken {
   policy    LegacyPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
 
   @@index([policyId])
+  @@index([policyId, kind])
   @@index([expiresAt])
   @@map("legacy_release_tokens")
+}
+
+model EmailOutbox {
+  id              String   @id @default(cuid())
+  toEmail         String   @db.VarChar(255)
+  template        String   @db.VarChar(40)
+  payload         Json
+  idempotencyKey  String   @unique @db.VarChar(191)
+  status          String   @default("pending") @db.VarChar(20)
+  attempts        Int      @default(0)
+  nextAttemptAt   DateTime @default(now())
+  lastError       String?  @db.VarChar(500)
+  createdAt       DateTime @default(now())
+  sentAt          DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@map("email_outbox")
 }
 
 model Vault {

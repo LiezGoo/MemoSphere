@@ -7,6 +7,7 @@ const db = vi.hoisted(() => ({
   ownerFindUnique: vi.fn(), policyFindMany: vi.fn(), policyFindFirst: vi.fn(), policyCreate: vi.fn(), policyUpdate: vi.fn(), policyUpdateMany: vi.fn(), policyDelete: vi.fn(),
   beneficiaryFindMany: vi.fn(), beneficiaryFindFirst: vi.fn(), beneficiaryCreate: vi.fn(), beneficiaryUpdate: vi.fn(), entryCount: vi.fn(), entryFindMany: vi.fn(), entryFindFirst: vi.fn(),
   userFindUnique: vi.fn(), userFindFirst: vi.fn(), emailIdentityQuery: vi.fn(), auditCreate: vi.fn(), tokenFindUnique: vi.fn(), tokenCreate: vi.fn(), tokenUpdateMany: vi.fn(), notificationCreate: vi.fn(),
+  emailOutboxCreate: vi.fn(), emailOutboxUpdate: vi.fn(),
 }));
 vi.mock('../../config/prisma.js', () => ({ prisma: {
   owner: { findUnique: db.ownerFindUnique },
@@ -16,6 +17,7 @@ vi.mock('../../config/prisma.js', () => ({ prisma: {
   user: { findUnique: db.userFindUnique, findFirst: db.userFindFirst },
   $queryRaw: db.emailIdentityQuery,
   legacyAuditLog: { create: db.auditCreate }, legacyReleaseToken: { findUnique: db.tokenFindUnique, create: db.tokenCreate, updateMany: db.tokenUpdateMany },
+  emailOutbox: { create: db.emailOutboxCreate, update: db.emailOutboxUpdate },
   notification: { create: db.notificationCreate },
   $transaction: vi.fn(async (input: unknown) => typeof input === 'function' ? (input as (tx: object) => Promise<unknown>)({ legacyPolicy: { updateMany: db.policyUpdateMany }, legacyAuditLog: { create: db.auditCreate }, legacyReleaseToken: { updateMany: db.tokenUpdateMany } }) : Promise.all(input as Promise<unknown>[])),
 } }));
@@ -36,6 +38,8 @@ function app() { const server = express(); server.use(express.json()); server.us
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.emailOutboxCreate.mockResolvedValue({ id: 'outbox-a' });
+  db.emailOutboxUpdate.mockResolvedValue({ id: 'outbox-a' });
   db.ownerFindUnique.mockImplementation(({ where }: { where: { userId: string } }) => Promise.resolve({ id: `owner-${where.userId.slice(-1)}`, userId: where.userId, displayName: where.userId }));
   db.policyFindMany.mockResolvedValue([]); db.policyFindFirst.mockResolvedValue(null); db.beneficiaryFindMany.mockResolvedValue([]); db.beneficiaryFindFirst.mockResolvedValue(null);
   db.policyUpdateMany.mockResolvedValue({ count: 0 }); db.userFindUnique.mockResolvedValue({ notificationPreferences: {} }); db.userFindFirst.mockResolvedValue(null);
