@@ -1,6 +1,10 @@
 {
-  "/(dashboard)/my-diary/page": "app/(dashboard)/my-diary/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
   "/(dashboard)/memory-timeline/page": "app/(dashboard)/memory-timeline/page.js",
   "/(dashboard)/writing-modes/page": "app/(dashboard)/writing-modes/page.js",
-  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js"
+  "/(dashboard)/legacy-policy/page": "app/(dashboard)/legacy-policy/page.js",
+  "/(dashboard)/beneficiaries/page": "app/(dashboard)/beneficiaries/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/my-diary/page": "app/(dashboard)/my-diary/page.js",
+  "/(dashboard)/letter-of-wishes/page": "app/(dashboard)/letter-of-wishes/page.js"
 }

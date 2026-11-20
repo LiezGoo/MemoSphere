@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const protectedPaths = ['/dashboard', '/my-diary', '/ai-diary', '/writing-modes', '/beneficiaries', '/legacy-policy', '/letter-of-wishes', '/activity-logs', '/settings', '/profile', '/vault', '/saved-information'];
-const apiBaseUrl = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+const apiBaseUrl = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
 
 function isProtectedPath(pathname: string): boolean {
   return protectedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -9,6 +9,14 @@ function isProtectedPath(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   if (!isProtectedPath(request.nextUrl.pathname)) return NextResponse.next();
+
+  if (!apiBaseUrl) {
+    // Fail closed when the backend URL is missing in a production deployment.
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = '/login';
+    loginUrl.search = '';
+    return NextResponse.redirect(loginUrl);
+  }
 
   try {
     const response = await fetch(`${apiBaseUrl}/api/auth/me`, {

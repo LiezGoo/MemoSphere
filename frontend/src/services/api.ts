@@ -1,7 +1,7 @@
 import type { ApiDiaryEntry, DashboardApiResponse } from '@/types';
 import type { AuthUser } from '@/components/auth-provider';
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly requestId?: string) {
@@ -42,6 +42,9 @@ export type LegacyBeneficiary = { id: string; fullName: string; email: string; r
 export type LegacyPolicy = { id: string; name: string; description: string | null; status: string; beneficiaryId: string; beneficiary: LegacyBeneficiary; scopeType: string; scopeCategories: string[] | null; scopeDateFrom: string | null; scopeDateTo: string | null; excludedEntryIds: string[]; entryLinks: { entryId: string }[]; releaseMethod: string; releaseAt: string | null; coolingOffDays: number; expiresAt: string | null; releaseReadyAt: string | null };
 
 export async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  if (!apiBaseUrl) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is not configured for this deployment.');
+  }
   const headers = new Headers(options?.headers);
   if (!(typeof FormData !== 'undefined' && options?.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -67,7 +70,11 @@ export async function apiRequest<T>(path: string, options?: RequestInit): Promis
 }
 
 export const authService = {
-  login: (payload: unknown) => apiRequest('/api/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+  login: (payload: unknown) => apiRequest('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30_000),
+  }),
   register: (payload: unknown) => apiRequest('/api/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   logout: () => apiRequest('/api/auth/logout', { method: 'POST' }),
   me: () => apiRequest<AuthMeResponse>('/api/auth/me'),
