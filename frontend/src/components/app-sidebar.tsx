@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Activity, BookOpen, FolderOpen, HeartHandshake, LayoutDashboard, Orbit,
+  BookOpen, FolderOpen, HeartHandshake, LayoutDashboard, Orbit,
   PenLine, ShieldCheck, UsersRound,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -32,9 +32,6 @@ const sections: { label: string; items: NavigationItem[] }[] = [
     { label: 'Beneficiaries', href: '/beneficiaries', icon: UsersRound },
     { label: 'Access Policies', href: '/legacy-policy', icon: ShieldCheck },
     { label: 'Letter of Wishes', href: '/letter-of-wishes', icon: HeartHandshake },
-  ] },
-  { label: 'System', items: [
-    { label: 'Activity Logs', href: '/activity-logs', icon: Activity },
   ] },
 ];
 

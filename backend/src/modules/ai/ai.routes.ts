@@ -7,11 +7,27 @@ import { getOwnerForUser } from '../../utils/owner.js';
 import type { AuthService } from '../auth/auth.types.js';
 import { createRateLimiter } from '../../middleware/rateLimiter.js';
 import { generateChatResponse } from './gemini.service.js';
+import { retrievePersonalSources, type PersonalSource } from './retrieval.service.js';
 
 const questionSchema = z.object({ conversationId: z.string().optional(), question: z.string().trim().min(1).max(4000) });
 const createConversationSchema = z.object({ mode: z.enum(['AI_BUDDY', 'DIARY_ASSISTANT']), title: z.string().trim().min(1).max(200).optional() });
 const sendMessageSchema = z.object({ question: z.string().trim().min(1).max(4000) });
 const idSchema = z.string().min(1).max(191);
+type AssistantCitation = { id: string; title: string; entryDate: string; sourceType: string; sourceLabel: string; href: string };
+
+function citationFor(source: PersonalSource): AssistantCitation {
+  const sourceLabel = source.type === 'DIARY_ENTRY' ? 'Diary entry' : source.type === 'LETTER_OF_WISHES' ? 'Letter of Wishes' : 'Drive file title';
+  return { id: source.id, title: source.title, entryDate: source.date.toISOString(), sourceType: source.type, sourceLabel, href: source.href };
+}
+
+async function answerMessage(mode: 'AI_BUDDY' | 'DIARY_ASSISTANT', ownerId: string, messages: Array<{ role: 'USER' | 'ASSISTANT'; content: string }>) {
+  const sources = mode === 'DIARY_ASSISTANT'
+    ? await retrievePersonalSources(ownerId, messages.filter((message) => message.role === 'USER').slice(-3).map((message) => message.content).join('\n'))
+    : [];
+  const context = sources.map((source) => `[SOURCE_TYPE:${source.type}] [SOURCE_ID:${source.id}] ${source.title}\nDate: ${source.date.toISOString()}\n${source.content}`).join('\n\n');
+  const citations = sources.map(citationFor);
+  return { answer: await generateChatResponse(mode, messages, context), citations, sources };
+}
 
 export function createAIRouter(authService: AuthService) {
   const router = Router();
@@ -52,10 +68,30 @@ export function createAIRouter(authService: AuthService) {
       const owner = await getOwnerForUser(request.authenticatedUserId!);
       const conversation = await prisma.aIConversation.findFirst({
         where: { id: id.data, ownerId: owner.id },
-        include: { messages: { orderBy: { createdAt: 'asc' }, include: { sources: true } } },
+        include: {
+          messages: {
+            orderBy: { createdAt: 'asc' },
+            include: { sources: { include: { diaryEntry: { select: { id: true, title: true, entryDate: true } } } } },
+          },
+        },
       });
       if (!conversation) throw new RequestValidationError('Conversation not found.');
-      response.json({ success: true, data: { conversation } });
+      const messages = conversation.messages.map(({ sources, ...message }) => ({
+        ...message,
+        citations: sources.map((source) => {
+          const sourceId = source.sourceId ?? source.diaryEntry?.id ?? source.diaryEntryId ?? source.id;
+          const sourceType = source.sourceType;
+          return {
+            id: sourceId,
+            title: source.sourceTitle ?? source.diaryEntry?.title ?? 'Diary entry',
+            entryDate: (source.sourceDate ?? source.diaryEntry?.entryDate ?? source.createdAt).toISOString(),
+            sourceType,
+            sourceLabel: sourceType === 'DIARY_ENTRY' ? 'Diary entry' : sourceType === 'LETTER_OF_WISHES' ? 'Letter of Wishes' : 'Drive file title',
+            href: sourceType === 'LETTER_OF_WISHES' ? '/letter-of-wishes' : sourceType === 'FILE_METADATA' ? '/files' : `/my-diary?entry=${encodeURIComponent(sourceId)}`,
+          };
+        }),
+      }));
+      response.json({ success: true, data: { conversation: { ...conversation, messages } } });
     } catch (error) { next(error); }
   });
 
@@ -89,36 +125,17 @@ export function createAIRouter(authService: AuthService) {
         ...conversation.messages.filter((message) => message.role === 'USER' || message.role === 'ASSISTANT'),
         { role: 'USER' as const, content: parsed.data.question },
       ];
-      let diaryContext = '';
-      let citations: Array<{ id: string; title: string; entryDate: string }> = [];
-
-      if (conversation.mode === 'DIARY_ASSISTANT') {
-        const terms = parsed.data.question.toLowerCase().split(/\W+/).filter((term) => term.length >= 4).slice(0, 6);
-        const entries = await prisma.diaryEntry.findMany({
-          where: {
-            ownerId: owner.id,
-            status: { not: 'DELETED' },
-            ...(terms.length ? { OR: terms.flatMap((term) => [{ title: { contains: term } }, { originalContent: { contains: term } }, { normalizedContent: { contains: term } }]) } : {}),
-          },
-          orderBy: { entryDate: 'desc' },
-          take: 8,
-          select: { id: true, title: true, entryDate: true, originalContent: true, normalizedContent: true },
-        });
-        diaryContext = entries.map((entry) => `[ENTRY_ID:${entry.id}] ${entry.title}\nDate: ${entry.entryDate.toISOString()}\n${entry.normalizedContent ?? entry.originalContent}`).join('\n\n');
-        citations = entries.slice(0, 3).map((entry) => ({ id: entry.id, title: entry.title, entryDate: entry.entryDate.toISOString() }));
-      }
-
-      const answer = await generateChatResponse(conversation.mode, recent.map((message) => ({ role: message.role as 'USER' | 'ASSISTANT', content: message.content })), diaryContext);
+      const reply = await answerMessage(conversation.mode, owner.id, recent.map((message) => ({ role: message.role as 'USER' | 'ASSISTANT', content: message.content })));
       const assistantMessage = await prisma.aIMessage.create({
         data: {
           conversationId: conversation.id,
           role: 'ASSISTANT',
-          content: answer,
-          ...(citations.length ? { sources: { create: citations.map((citation) => ({ diaryEntryId: citation.id })) } } : {}),
+          content: reply.answer,
+          ...(reply.sources.length ? { sources: { create: reply.sources.map((source) => ({ diaryEntryId: source.type === 'DIARY_ENTRY' ? source.id : null, sourceType: source.type, sourceId: source.id, sourceTitle: source.title, sourceDate: source.date })) } } : {}),
         },
       });
       await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-      response.json({ success: true, data: { conversationId: conversation.id, message: { id: assistantMessage.id, role: 'ASSISTANT', content: answer, citations } } });
+      response.json({ success: true, data: { conversationId: conversation.id, message: { id: assistantMessage.id, role: 'ASSISTANT', content: reply.answer, citations: reply.citations } } });
     } catch (error) { next(error); }
   });
 
@@ -138,10 +155,10 @@ export function createAIRouter(authService: AuthService) {
               .filter((message) => message.role === 'USER' || message.role === 'ASSISTANT')
               .map((message) => ({ role: message.role as 'USER' | 'ASSISTANT', content: message.content }))
           : [];
-      const answer = await generateChatResponse(conversation.mode, [...existing, { role: 'USER' as const, content: parsed.data.question }]);
-      const assistantMessage = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'ASSISTANT', content: answer } });
+      const reply = await answerMessage(conversation.mode, owner.id, [...existing, { role: 'USER' as const, content: parsed.data.question }]);
+      const assistantMessage = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'ASSISTANT', content: reply.answer, ...(reply.sources.length ? { sources: { create: reply.sources.map((source) => ({ diaryEntryId: source.type === 'DIARY_ENTRY' ? source.id : null, sourceType: source.type, sourceId: source.id, sourceTitle: source.title, sourceDate: source.date })) } } : {}) } });
       await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-      response.json({ success: true, data: { conversationId: conversation.id, message: { id: assistantMessage.id, role: assistantMessage.role, content: assistantMessage.content, citations: [] } } });
+      response.json({ success: true, data: { conversationId: conversation.id, message: { id: assistantMessage.id, role: assistantMessage.role, content: assistantMessage.content, citations: reply.citations } } });
     } catch (error) { next(error); }
   });
   return router;

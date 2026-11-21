@@ -31,7 +31,7 @@ export type ActivityLog = {
   result: string;
   createdAt: string;
 };
-export type AssistantCitation = { id: string; title: string; entryDate: string };
+export type AssistantCitation = { id: string; title: string; entryDate: string; sourceType?: 'DIARY_ENTRY' | 'LETTER_OF_WISHES' | 'FILE_METADATA'; sourceLabel?: string; href?: string };
 export type AssistantReply = {
   conversationId: string;
   message: { id: string; role: 'ASSISTANT'; content: string; citations: AssistantCitation[] };
@@ -153,7 +153,7 @@ export const assistantService = {
   ask: (payload: { conversationId?: string; question: string }) => apiRequest<{ success: true; data: AssistantReply }>('/api/ai/conversations/messages', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data),
   createConversation: (mode: 'AI_BUDDY' | 'DIARY_ASSISTANT', title?: string) => apiRequest<{ success: true; data: { conversation: { id: string; mode: 'AI_BUDDY' | 'DIARY_ASSISTANT'; title: string | null; createdAt: string; updatedAt: string } } }>('/api/ai/conversations', { method: 'POST', body: JSON.stringify({ mode, title }) }).then((result) => result.data.conversation),
   listConversations: (mode?: 'AI_BUDDY' | 'DIARY_ASSISTANT') => apiRequest<{ success: true; data: { conversations: Array<{ id: string; mode: 'AI_BUDDY' | 'DIARY_ASSISTANT'; title: string | null; createdAt: string; updatedAt: string }> } }>(`/api/ai/conversations${mode ? `?mode=${mode}` : ''}`).then((result) => result.data.conversations),
-  getConversation: (id: string) => apiRequest<{ success: true; data: { conversation: { id: string; mode: 'AI_BUDDY' | 'DIARY_ASSISTANT'; title: string | null; messages: Array<{ id: string; role: 'USER' | 'ASSISTANT'; content: string; createdAt: string; sources?: unknown[] }> } } }>(`/api/ai/conversations/${encodeURIComponent(id)}`).then((result) => result.data.conversation),
+  getConversation: (id: string) => apiRequest<{ success: true; data: { conversation: { id: string; mode: 'AI_BUDDY' | 'DIARY_ASSISTANT'; title: string | null; messages: Array<{ id: string; role: 'USER' | 'ASSISTANT'; content: string; createdAt: string; citations?: AssistantCitation[] }> } } }>(`/api/ai/conversations/${encodeURIComponent(id)}`).then((result) => result.data.conversation),
   send: (id: string, question: string) => apiRequest<{ success: true; data: AssistantReply }>(`/api/ai/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', body: JSON.stringify({ question }) }).then((result) => result.data),
   removeConversation: (id: string) => apiRequest<void>(`/api/ai/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

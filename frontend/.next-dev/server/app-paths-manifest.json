@@ -1,9 +1,8 @@
 {
-  "/(dashboard)/files/page": "app/(dashboard)/files/page.js",
-  "/(dashboard)/legacy-policy/page": "app/(dashboard)/legacy-policy/page.js",
-  "/(dashboard)/letter-of-wishes/page": "app/(dashboard)/letter-of-wishes/page.js",
-  "/(dashboard)/beneficiaries/page": "app/(dashboard)/beneficiaries/page.js",
-  "/(dashboard)/memory-timeline/page": "app/(dashboard)/memory-timeline/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
   "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
-  "/(dashboard)/my-diary/page": "app/(dashboard)/my-diary/page.js"
+  "/(dashboard)/memory-timeline/page": "app/(dashboard)/memory-timeline/page.js",
+  "/(dashboard)/files/page": "app/(dashboard)/files/page.js",
+  "/(dashboard)/letter-of-wishes/page": "app/(dashboard)/letter-of-wishes/page.js",
+  "/(dashboard)/profile/page": "app/(dashboard)/profile/page.js"
 }

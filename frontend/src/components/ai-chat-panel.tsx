@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Bot, LoaderCircle, Send, Trash2 } from 'lucide-react';
@@ -6,6 +6,7 @@ import { ApiError, assistantService, type AssistantCitation } from '@/services/a
 
 type ChatMode = 'AI_BUDDY' | 'DIARY_ASSISTANT';
 type ChatMessage = { id: string; role: 'USER' | 'ASSISTANT'; content: string; createdAt: string; citations: AssistantCitation[] };
+const diarySuggestions = ['Search my saved memories.', 'Summarize my Letter of Wishes.', 'Find a saved file by its name.', 'What have I written about my future plans?'];
 
 export default function AIChatPanel({ userId, compact = false }: { userId: string; compact?: boolean }) {
   const [mode, setMode] = useState<ChatMode>('AI_BUDDY');
@@ -50,7 +51,7 @@ export default function AIChatPanel({ userId, compact = false }: { userId: strin
           role: message.role,
           content: message.content,
           createdAt: message.createdAt,
-          citations: [],
+          citations: message.citations ?? [],
         })));
       } catch {
         if (active) {
@@ -85,7 +86,7 @@ export default function AIChatPanel({ userId, compact = false }: { userId: strin
     try {
       const conversation = await assistantService.getConversation(id);
       setConversationId(conversation.id);
-      setMessages(conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, createdAt: message.createdAt, citations: [] })));
+      setMessages(conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, createdAt: message.createdAt, citations: message.citations ?? [] })));
     } catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Unable to open this conversation.'); }
     finally { setOpeningConversationId(null); }
   };
@@ -142,11 +143,11 @@ export default function AIChatPanel({ userId, compact = false }: { userId: strin
   return (
     <div className={`ai-chat-page${compact ? ' is-compact' : ''}`}>
       <aside className="ai-chat-history">
-        <button type="button" className="button button-primary" onClick={() => void newConversation()} disabled={restoring || loading || creatingConversation || sending}>{creatingConversation ? 'Starting…' : 'New conversation'}</button>
+        <button type="button" className="button button-primary" onClick={() => void newConversation()} disabled={restoring || loading || creatingConversation || sending}>{creatingConversation ? 'Startingâ€¦' : 'New conversation'}</button>
         <div className="ai-chat-history-list">
           {loading ? <p>Loading conversations...</p> : conversations.length ? conversations.map((conversation) => (
             <div className={conversationId === conversation.id ? 'is-active' : ''} key={conversation.id}>
-              <button type="button" onClick={() => void openConversation(conversation.id)} disabled={restoring || openingConversationId !== null}>{openingConversationId === conversation.id ? 'Opening…' : conversation.title || 'Conversation'}</button>
+              <button type="button" onClick={() => void openConversation(conversation.id)} disabled={restoring || openingConversationId !== null}>{openingConversationId === conversation.id ? 'Openingâ€¦' : conversation.title || 'Conversation'}</button>
               <button type="button" aria-label="Delete conversation" onClick={() => void removeConversation(conversation.id)}><Trash2 size={14} /></button>
             </div>
           )) : <p>No conversations yet.</p>}
@@ -158,10 +159,10 @@ export default function AIChatPanel({ userId, compact = false }: { userId: strin
           <button type="button" role="tab" aria-selected={mode === 'DIARY_ASSISTANT'} className={mode === 'DIARY_ASSISTANT' ? 'is-active' : ''} onClick={() => changeMode('DIARY_ASSISTANT')} disabled={restoring || sending || creatingConversation}>Diary Assistant</button>
         </div>
         <div className="ai-chat-messages" aria-live="polite">
-          {restoring ? <div className="ai-chat-empty" role="status"><LoaderCircle size={24} /><p>Restoring your conversation…</p></div> : !messages.length ? <div className="ai-chat-empty"><Bot size={30} /><h2>{mode === 'AI_BUDDY' ? 'Talk with Memo' : 'Explore your memories'}</h2><p>{mode === 'AI_BUDDY' ? 'Share what is on your mind or ask a general question.' : 'Ask about experiences or memories from your own diary.'}</p></div> : messages.map((message) => (
+          {restoring ? <div className="ai-chat-empty" role="status"><LoaderCircle size={24} /><p>Restoring your conversationâ€¦</p></div> : !messages.length ? <div className="ai-chat-empty"><Bot size={30} /><h2>{mode === 'AI_BUDDY' ? 'Talk with Memo' : 'Search your personal knowledge'}</h2><p>{mode === 'AI_BUDDY' ? 'Share what is on your mind or ask a general question.' : 'Ask about diary entries, voice transcripts, your Letter of Wishes, or find a saved Drive file by name.'}</p>{mode === 'DIARY_ASSISTANT' && <><div className="ai-chat-suggestions" aria-label="Suggested questions">{diarySuggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => setQuestion(suggestion)}>{suggestion}</button>)}</div><small className="ai-chat-source-note">Drive file contents, standalone letters, and wills are not indexed yet.</small></>}</div> : messages.map((message) => (
             <article key={message.id} className={`ai-chat-message ${message.role === 'USER' ? 'from-user' : 'from-assistant'}`}>
               {message.role === 'ASSISTANT' && <span><Bot size={15} /></span>}
-              <div><p>{message.content}</p>{message.citations.length > 0 && <div className="ai-chat-citations">{message.citations.map((citation) => <a key={citation.id} href={`/my-diary?entry=${encodeURIComponent(citation.id)}`}>{citation.title}</a>)}</div>}</div>
+              <div><p>{message.content}</p>{message.citations.length > 0 && <div className="ai-chat-citations">{message.citations.map((citation) => <a key={`${citation.sourceType ?? 'DIARY_ENTRY'}:${citation.id}`} href={citation.href ?? `/my-diary?entry=${encodeURIComponent(citation.id)}`}><small>{citation.sourceLabel ?? 'Diary entry'}</small><span>{citation.title}</span></a>)}</div>}</div>
             </article>
           ))}
           {sending && <div className="ai-chat-loading" role="status"><LoaderCircle size={16} /> Memo is thinking...</div>}
@@ -169,7 +170,7 @@ export default function AIChatPanel({ userId, compact = false }: { userId: strin
         </div>
         {error && <p className="field-error" role="alert">{error}</p>}
         <form className="ai-chat-composer" onSubmit={send}>
-          <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder={mode === 'AI_BUDDY' ? 'Message your AI buddy...' : 'Ask about your diary...'} rows={2} maxLength={4000} disabled={sending || restoring || creatingConversation} />
+          <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder={mode === 'AI_BUDDY' ? 'Message your AI buddy...' : 'Ask about your saved content...'} rows={2} maxLength={4000} disabled={sending || restoring || creatingConversation} />
           <button type="submit" aria-label="Send message" disabled={!question.trim() || sending || restoring || creatingConversation}><Send size={17} /></button>
         </form>
       </section>

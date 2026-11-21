@@ -683,11 +683,15 @@ model AIMessage {
 model AIMessageSource {
   id           String     @id @default(cuid())
   messageId    String
-  diaryEntryId String
+  diaryEntryId String?
+  sourceType   String     @default("DIARY_ENTRY") @db.VarChar(30)
+  sourceId     String?    @db.VarChar(191)
+  sourceTitle  String?    @db.VarChar(255)
+  sourceDate   DateTime?
   citationText String?    @db.Text
   createdAt    DateTime   @default(now())
   message      AIMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  diaryEntry   DiaryEntry @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
+  diaryEntry   DiaryEntry? @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, diaryEntryId])
   @@map("ai_message_sources")
