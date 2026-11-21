@@ -2,6 +2,7 @@
 
 import { Bell, BookHeart, Clock3, CircleUserRound, LogOut, Search, Settings, ShieldCheck, Sparkles, X, BellRing } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { authService, notificationsService, profileService, type NotificationItem, type Profile } from '@/services/api';
@@ -213,9 +214,9 @@ export default function AppHeader({ sidebarCollapsed, mobileOpen, onMenuToggle }
         </button>
         {profileOpen && <div className="header-dropdown profile-dropdown" ref={profilePanelRef} role="menu" aria-label="Account menu" onKeyDown={(event) => handleMenuKeyDown(event, 'profile')}>
           {(profile || user) && <div className="profile-menu-identity"><span className="profile-menu-avatar">{profile?.avatarUrl ? <img src={`${apiBaseUrl}${profile.avatarUrl}`} alt="" /> : <CircleUserRound size={22} />}</span><span><strong>{profile?.fullName ?? user?.fullName ?? 'Your profile'}</strong>{(profile?.email ?? user?.email) && <small>{profile?.email ?? user?.email}</small>}</span></div>}
-          <a role="menuitem" data-menu-item href="/profile"><CircleUserRound size={16} /> Profile</a>
-          <a role="menuitem" data-menu-item href="/profile#notifications"><Bell size={16} /> Notification preferences</a>
-          <a role="menuitem" data-menu-item href="/settings" aria-current={pathname.startsWith('/settings') ? 'page' : undefined}><Settings size={16} /> Settings</a>
+          <Link role="menuitem" data-menu-item href="/profile"><CircleUserRound size={16} /> Profile</Link>
+          <Link role="menuitem" data-menu-item href="/profile#notifications"><Bell size={16} /> Notification preferences</Link>
+          <Link role="menuitem" data-menu-item href="/settings" aria-current={pathname.startsWith('/settings') ? 'page' : undefined}><Settings size={16} /> Settings</Link>
           <div className="profile-menu-divider" role="separator" />
           <button role="menuitem" data-menu-item type="button" disabled={signingOut} onClick={() => { void signOut(); }}><LogOut size={16} /> {signingOut ? 'Signing out...' : 'Sign out'}</button>
           {menuError && <p className="header-dropdown-error" role="alert">{menuError}</p>}

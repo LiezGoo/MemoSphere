@@ -16,7 +16,7 @@ const idSchema = z.string().min(1).max(191);
 type AssistantCitation = { id: string; title: string; entryDate: string; sourceType: string; sourceLabel: string; href: string };
 
 function citationFor(source: PersonalSource): AssistantCitation {
-  const sourceLabel = source.type === 'DIARY_ENTRY' ? 'Diary entry' : source.type === 'LETTER_OF_WISHES' ? 'Letter of Wishes' : 'Drive file title';
+  const sourceLabel = source.type === 'DIARY_ENTRY' ? 'Diary entry' : source.type === 'LETTER_OF_WISHES' ? 'Letter of Wishes' : source.type === 'PLAYLIST' ? 'Saved YouTube item' : 'Drive file title';
   return { id: source.id, title: source.title, entryDate: source.date.toISOString(), sourceType: source.type, sourceLabel, href: source.href };
 }
 
@@ -86,8 +86,8 @@ export function createAIRouter(authService: AuthService) {
             title: source.sourceTitle ?? source.diaryEntry?.title ?? 'Diary entry',
             entryDate: (source.sourceDate ?? source.diaryEntry?.entryDate ?? source.createdAt).toISOString(),
             sourceType,
-            sourceLabel: sourceType === 'DIARY_ENTRY' ? 'Diary entry' : sourceType === 'LETTER_OF_WISHES' ? 'Letter of Wishes' : 'Drive file title',
-            href: sourceType === 'LETTER_OF_WISHES' ? '/letter-of-wishes' : sourceType === 'FILE_METADATA' ? '/files' : `/my-diary?entry=${encodeURIComponent(sourceId)}`,
+            sourceLabel: sourceType === 'DIARY_ENTRY' ? 'Diary entry' : sourceType === 'LETTER_OF_WISHES' ? 'Letter of Wishes' : sourceType === 'PLAYLIST' ? 'Saved YouTube item' : 'Drive file title',
+            href: sourceType === 'LETTER_OF_WISHES' ? '/letter-of-wishes' : sourceType === 'FILE_METADATA' ? '/files' : sourceType === 'PLAYLIST' ? `/files?playlist=${encodeURIComponent(sourceId)}` : `/my-diary?entry=${encodeURIComponent(sourceId)}`,
           };
         }),
       }));

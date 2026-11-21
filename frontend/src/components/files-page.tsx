@@ -114,6 +114,12 @@ export default function FilesPage() {
     finally { setLoadingPlaylists(false); }
   }, []);
   useEffect(() => { void loadFiles(); void loadPlaylists(); }, [loadFiles, loadPlaylists]);
+  useEffect(() => {
+    const playlistId = new URLSearchParams(window.location.search).get('playlist');
+    if (!playlistId || !playlists.some((item) => item.id === playlistId)) return;
+    setMobileTab('playlists');
+    document.getElementById(`saved-music-${playlistId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [playlists]);
   useEffect(() => () => { xhrs.current.forEach((xhr) => xhr.abort()); uploadControllers.current.forEach((controller) => controller.abort()); if (tokenTimer.current) clearTimeout(tokenTimer.current); }, []);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
 
@@ -401,7 +407,7 @@ export default function FilesPage() {
         <p className="files-youtube-note">Playback is provided by YouTube.</p>
         {playlistsError && <div className="files-error" role="alert">{playlistsError}{playlistLoadReference && <small className="files-error-reference">Reference: {playlistLoadReference}</small>}</div>}
         {!loadingPlaylists && playlists.length > 0 && <button type="button" className="files-secondary-button youtube-play-all" onClick={playAll}>Play all</button>}
-        {loadingPlaylists ? <div className="files-skeleton files-playlist-skeleton" role="status" aria-label="Loading YouTube items"><i /><i /></div> : playlists.length === 0 ? <div className="files-playlists-empty"><Music2 size={23} /><span>Add your first YouTube video or playlist.</span></div> : <ul className="files-playlist-list">{playlists.map((playlist) => <li key={playlist.id}>
+        {loadingPlaylists ? <div className="files-skeleton files-playlist-skeleton" role="status" aria-label="Loading YouTube items"><i /><i /></div> : playlists.length === 0 ? <div className="files-playlists-empty"><Music2 size={23} /><span>Add your first YouTube video or playlist.</span></div> : <ul className="files-playlist-list">{playlists.map((playlist) => <li key={playlist.id} id={`saved-music-${playlist.id}`}>
           <div className="files-playlist-card">{playlist.kind === 'video' || playlist.youtubeVideoId ? <div className="youtube-thumb"><img src={`https://i.ytimg.com/vi/${playlist.youtubeVideoId}/hqdefault.jpg`} alt="" /><button type="button" className="files-play-button" aria-label={`Play ${playlist.title}`} onClick={() => playPlaylist(playlist)}><Play size={16} fill="currentColor" /></button></div> : <button type="button" className="files-play-button" aria-label={`Play ${playlist.title}`} onClick={() => playPlaylist(playlist)}><Music2 size={17} /></button>}<div className="files-playlist-copy"><strong title={playlist.title}>{playlist.title}</strong><span>{playlist.kind === 'video' || playlist.youtubeVideoId ? 'YouTube video' : 'YouTube playlist'}</span></div><button type="button" aria-label={`Rename ${playlist.title}`} onClick={() => { setRenamePlaylist(playlist); setRenameValue(playlist.title); }}>Aa</button><button type="button" aria-label={`Remove ${playlist.title}`} onClick={() => void removePlaylist(playlist)}><Trash2 size={15} /></button></div>
         </li>)}</ul>}
       </aside>

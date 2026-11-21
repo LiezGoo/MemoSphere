@@ -117,11 +117,12 @@ export default function MiniPlayer() {
   }, [position]);
 
   const close = () => { if (nextErrorTimer.current) clearTimeout(nextErrorTimer.current); nextErrorTimer.current = null; playerRef.current?.stopVideo(); setPlaying(false); setVisible(false); setPosition(null); };
-  const dragStart = (event: React.PointerEvent<HTMLDivElement>) => { if ((event.target as HTMLElement).closest('button')) return; event.preventDefault(); setPosition(position ?? { left: 20, top: Math.max(8, window.innerHeight - 230) }); };
+  const dragStart = (event: React.PointerEvent<HTMLDivElement>) => { if ((event.target as HTMLElement).closest('button')) return; event.preventDefault(); setPosition(position ?? { left: Math.max(8, window.innerWidth - 340), top: Math.max(8, Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue('--header-h'), 10) + 12) }); };
 
   const advance = (direction: -1 | 1) => { const nextIndex = queueIndexRef.current + direction; if (nextIndex >= 0 && nextIndex < queueRef.current.length) { queueIndexRef.current = nextIndex; const item = queueRef.current[nextIndex]!; setCurrentTitle(item.title); if (item.youtubeVideoId) playerRef.current?.loadVideoById({ videoId: item.youtubeVideoId, startSeconds: item.startSeconds ?? 0 }); else if (item.youtubePlaylistId) playerRef.current?.loadPlaylist({ list: item.youtubePlaylistId, listType: 'playlist', index: 0 }); } else if (direction > 0) playerRef.current?.nextVideo(); else playerRef.current?.previousVideo(); };
   return <section className={`mini-player${collapsed ? ' is-collapsed' : ''}${visible ? '' : ' is-hidden'}`} style={position ? { left: position.left, top: position.top, right: 'auto', bottom: 'auto' } : undefined} aria-label="YouTube player" aria-hidden={!visible}>
       <div className="mini-player-heading" onPointerDown={dragStart}><span className="mini-player-grip" aria-hidden="true">⋮⋮</span><strong title={currentTitle}>{currentTitle}</strong>
+        {collapsed && <button type="button" aria-label={playing ? 'Pause playlist' : 'Resume playlist'} onClick={() => { setPlayError(''); if (playing) playerRef.current?.pauseVideo(); else playerRef.current?.playVideo(); }}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>}
         <button type="button" aria-label={collapsed ? 'Expand player' : 'Collapse player'} onClick={() => setCollapsed((value) => !value)}>{collapsed ? <Maximize2 size={16} /> : <Minimize2 size={16} />}</button>
         <button type="button" aria-label="Close player and stop playback" onClick={close}><X size={17} /></button>
       </div>

@@ -31,7 +31,7 @@ export type ActivityLog = {
   result: string;
   createdAt: string;
 };
-export type AssistantCitation = { id: string; title: string; entryDate: string; sourceType?: 'DIARY_ENTRY' | 'LETTER_OF_WISHES' | 'FILE_METADATA'; sourceLabel?: string; href?: string };
+export type AssistantCitation = { id: string; title: string; entryDate: string; sourceType?: 'DIARY_ENTRY' | 'LETTER_OF_WISHES' | 'FILE_METADATA' | 'PLAYLIST'; sourceLabel?: string; href?: string };
 export type AssistantReply = {
   conversationId: string;
   message: { id: string; role: 'ASSISTANT'; content: string; citations: AssistantCitation[] };

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import AppHeader from '@/components/app-header';
 import AppSidebar from '@/components/app-sidebar';
 
@@ -11,6 +12,7 @@ type AppLayoutProps = {
 const SIDEBAR_STORAGE_KEY = 'alaala-sidebar-collapsed';
 
 export default function AppLayout({ children }: AppLayoutProps) {
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -67,8 +69,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
     });
   };
 
+  const preservePlayerNavigation = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+    if (!anchor || anchor.target || anchor.hasAttribute('download')) return;
+    const destination = new URL(anchor.href, window.location.href);
+    if (destination.origin !== window.location.origin || destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+    event.preventDefault();
+    router.push(`${destination.pathname}${destination.search}${destination.hash}`);
+  };
+
   return (
-    <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'sidebar-open' : ''}`}>
+    <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'sidebar-open' : ''}`} onClick={preservePlayerNavigation}>
       <AppHeader sidebarCollapsed={collapsed} mobileOpen={mobileOpen} onMenuToggle={toggleMenu} />
       <div className="app-layout-body">
         <AppSidebar collapsed={mobile ? false : collapsed} open={mobileOpen || !mobile} onClose={() => setMobileOpen(false)} />

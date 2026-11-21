@@ -5,6 +5,7 @@ import {
   PenLine, ShieldCheck, UsersRound,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { useEffect, useRef, useState, type ComponentType, type FocusEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -76,7 +77,7 @@ export default function AppSidebar({ collapsed, open, onClose }: AppSidebarProps
             <div className="app-sidebar-links">
               {section.items.map(({ label, href, icon: Icon }) => {
                 const isActive = active(href);
-                return <a key={href} className={`app-sidebar-link ${isActive ? 'is-active' : ''}`} href={href} aria-current={isActive ? 'page' : undefined} aria-label={collapsed ? label : undefined} aria-describedby={collapsed && tooltip?.label === label ? 'app-sidebar-tooltip' : undefined} onClick={onClose} {...tooltipHandlers(label)}><Icon size={21} strokeWidth={1.9} /><span>{label}</span></a>;
+                return <Link key={href} className={`app-sidebar-link ${isActive ? 'is-active' : ''}`} href={href} aria-current={isActive ? 'page' : undefined} aria-label={collapsed ? label : undefined} aria-describedby={collapsed && tooltip?.label === label ? 'app-sidebar-tooltip' : undefined} onClick={onClose} {...tooltipHandlers(label)}><Icon size={21} strokeWidth={1.9} /><span>{label}</span></Link>;
               })}
             </div>
           </section>

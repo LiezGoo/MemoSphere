@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { CalendarDays, CloudRain, Eye, Flame, Leaf, Search, Sparkles, Waves, X } from 'lucide-react';
 import { ApiError, diaryService } from '@/services/api';
 import type { ApiDiaryEntry } from '@/types';
@@ -279,7 +280,7 @@ export default function MemoryTimeline() {
               </div>
               <footer className="memory-preview-actions">
                 <button type="button" className="button button-secondary" onClick={() => void classify()} disabled={emotionSaving || detailLoading}><Sparkles size={15} /> {emotionSaving ? 'Updating…' : 'Classify again'}</button>
-                <a className="button button-primary" href={`/my-diary?entry=${selected.id}`}>Open original diary entry</a>
+                <Link className="button button-primary" href={`/my-diary?entry=${selected.id}`}>Open original diary entry</Link>
               </footer>
             </article>
             {lightbox && <div className="memory-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightbox(null); }}><div className="memory-lightbox-content" role="dialog" aria-modal="true" aria-label="Attached photo"><button ref={lightboxCloseRef} type="button" className="memory-lightbox-close" aria-label="Close photo" onClick={() => setLightbox(null)}><X size={19} /></button><img src={lightbox.src} alt={lightbox.alt} /></div></div>}
