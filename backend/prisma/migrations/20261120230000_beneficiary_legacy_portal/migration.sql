@@ -1,7 +1,11 @@
 ALTER TABLE `beneficiaries`
-  MODIFY `status` ENUM('INVITED', 'REGISTERED', 'ACCEPTED', 'VERIFIED', 'SUSPENDED', 'REMOVED', 'DECLINED', 'REVOKED') NOT NULL DEFAULT 'INVITED',
-  ADD COLUMN `userId` VARCHAR(191) NULL,
-  ADD INDEX `beneficiaries_userId_status_idx` (`userId`, `status`),
+  MODIFY `status` ENUM('INVITED', 'REGISTERED', 'ACCEPTED', 'VERIFIED', 'SUSPENDED', 'REMOVED', 'DECLINED', 'REVOKED') NOT NULL DEFAULT 'INVITED';
+
+ALTER TABLE `beneficiaries` ADD COLUMN `userId` VARCHAR(191) NULL;
+
+ALTER TABLE `beneficiaries` ADD INDEX `beneficiaries_userId_status_idx` (`userId`, `status`);
+
+ALTER TABLE `beneficiaries`
   ADD CONSTRAINT `beneficiaries_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 CREATE TABLE `legacy_policy_resources` (

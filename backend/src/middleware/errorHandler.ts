@@ -25,9 +25,8 @@ export const errorHandler: ErrorRequestHandler = (error, request, response, next
     success: false,
     error: {
       code: 'INTERNAL_ERROR',
-      message: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : 'An unexpected error occurred.',
+      message: 'An unexpected error occurred.',
       requestId,
-      ...(process.env.NODE_ENV === 'development' ? { details } : {}),
     },
   });
 };

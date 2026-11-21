@@ -209,16 +209,23 @@ export function createLegacyRouter(authService: AuthService) {
   router.get('/resource-catalog', async (req, res, next) => {
     try {
       const owner = await getOwnerForUser(req.authenticatedUserId!);
-      const [files, playlists, wishes] = await Promise.all([
+      const [filesResult, playlistsResult, wishesResult] = await Promise.allSettled([
         prisma.userFile.findMany({ where: { ownerId: owner.id }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, mime: true, category: true } }),
         prisma.userPlaylist.findMany({ where: { ownerId: owner.id }, orderBy: { position: 'asc' }, select: { id: true, title: true, youtubePlaylistId: true } }),
         prisma.letterOfWishes.findUnique({ where: { ownerId: owner.id }, select: { id: true, title: true } }),
       ]);
+      const files = filesResult.status === 'fulfilled' ? filesResult.value : [];
+      const playlists = playlistsResult.status === 'fulfilled' ? playlistsResult.value : [];
+      const wishes = wishesResult.status === 'fulfilled' ? wishesResult.value : null;
+      const partial = [filesResult, playlistsResult, wishesResult].some((result) => result.status === 'rejected');
+      for (const [name, result] of [['files', filesResult], ['playlists', playlistsResult], ['wishes', wishesResult]] as const) {
+        if (result.status === 'rejected') console.error(JSON.stringify({ level: 'error', event: 'legacy_resource_catalog_partial', requestId: res.locals.requestId, list: name, error: result.reason instanceof Error ? { name: result.reason.name, message: result.reason.message, stack: result.reason.stack } : String(result.reason) }));
+      }
       res.json({ success: true, data: { resources: [
         ...files.map((file) => ({ resourceType: 'FILE' as const, resourceId: file.id, title: file.name, detail: `${file.category} · ${file.mime}` })),
         ...playlists.map((playlist) => ({ resourceType: 'PLAYLIST' as const, resourceId: playlist.id, title: playlist.title, detail: 'YouTube playlist' })),
         ...(wishes ? [{ resourceType: 'WISHES' as const, resourceId: wishes.id, title: wishes.title, detail: 'Letter of wishes' }] : []),
-      ] } });
+      ], ...(partial ? { partial: true, warning: 'Some optional resources could not be loaded.' } : {}) } });
     } catch (error) { next(error); }
   });
   router.get('/policies', async (req, res, next) => { try { await settleCoolingOff(); const owner = await getOwnerForUser(req.authenticatedUserId!); const { status } = parse(listSchema, req.query); const policies = await prisma.legacyPolicy.findMany({ where: { ownerId: owner.id, ...(status ? { status } : {}) }, include: { beneficiary: { select: { id: true, fullName: true, email: true, status: true } }, entryLinks: { select: { entryId: true } }, resources: { select: { resourceType: true, resourceId: true } } }, orderBy: { updatedAt: 'desc' } }); res.json({ success: true, data: { policies } }); } catch (e) { next(e); } });

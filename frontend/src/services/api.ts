@@ -171,7 +171,7 @@ export const policyService = {
 };
 
 export const legacyPolicyService = {
-  resourceCatalog: () => apiRequest<{ success: true; data: { resources: LegacyResourceCatalogItem[] } }>('/api/legacy/resource-catalog').then((r) => r.data.resources),
+  resourceCatalog: () => apiRequest<{ success: true; data: { resources: LegacyResourceCatalogItem[]; partial?: boolean; warning?: string } }>('/api/legacy/resource-catalog').then((r) => r.data),
   confirmVerifier: (token: string) => apiRequest<{ success: true; data: { releaseReadyAt: string } }>('/api/legacy/verifier/confirm', { method: 'POST', body: JSON.stringify({ token }) }).then((r) => r.data),
   listBeneficiaries: () => apiRequest<{ success: true; data: { beneficiaries: LegacyBeneficiary[] } }>('/api/legacy/beneficiaries').then((r) => r.data.beneficiaries),
   createBeneficiary: (payload: unknown) => beneficiaryService.create(payload).then((result) => ({ beneficiary: result.beneficiary as LegacyBeneficiary, delivery: result.delivery })),
