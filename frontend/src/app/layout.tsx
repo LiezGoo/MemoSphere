@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import '../styles/futuristic.css';
+import '../styles/files.css';
+import '../styles/beneficiary-portal.css';
 
 export const metadata: Metadata = {
   title: 'MemoSphere | A quiet place for what matters',

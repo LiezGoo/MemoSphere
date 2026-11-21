@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import bcrypt from 'bcrypt';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
   ownerFindUnique: vi.fn(), policyFindMany: vi.fn(), policyFindFirst: vi.fn(), policyCreate: vi.fn(), policyUpdate: vi.fn(), policyUpdateMany: vi.fn(), policyDelete: vi.fn(),
@@ -23,6 +23,7 @@ vi.mock('../../config/prisma.js', () => ({ prisma: {
 } }));
 
 import { createLegacyRouter } from './legacy.routes.js';
+import { legacyMailer } from './legacy-mailer.js';
 import { errorHandler } from '../../middleware/errorHandler.js';
 import type { AuthService, SafeUser } from '../auth/auth.types.js';
 
@@ -45,7 +46,9 @@ beforeEach(() => {
   db.policyUpdateMany.mockResolvedValue({ count: 0 }); db.userFindUnique.mockResolvedValue({ notificationPreferences: {} }); db.userFindFirst.mockResolvedValue(null);
   db.emailIdentityQuery.mockResolvedValue([]);
   db.notificationCreate.mockResolvedValue({}); db.auditCreate.mockResolvedValue({});
+  vi.spyOn(legacyMailer, 'sendBeneficiaryInvite').mockResolvedValue({ sent: true });
 });
+afterEach(() => vi.restoreAllMocks());
 
 describe('legacy policy security boundary', () => {
   it('requires an authenticated owner session', async () => {

@@ -90,6 +90,15 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
   type __Unused = __Check
 }
 
+// Validate ../../src/app/(dashboard)/files/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/files">> = Specific
+  const handler = {} as typeof import("../../src/app/(dashboard)/files/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/(dashboard)/legacy-policy/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/legacy-policy">> = Specific
@@ -166,6 +175,33 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
 {
   type __IsExpected<Specific extends AppPageConfig<"/writing-modes">> = Specific
   const handler = {} as typeof import("../../src/app/(dashboard)/writing-modes/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/beneficiary-portal/invitation/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/beneficiary-portal/invitation">> = Specific
+  const handler = {} as typeof import("../../src/app/beneficiary-portal/invitation/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/beneficiary-portal/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/beneficiary-portal">> = Specific
+  const handler = {} as typeof import("../../src/app/beneficiary-portal/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/beneficiary-portal/verifier/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/beneficiary-portal/verifier">> = Specific
+  const handler = {} as typeof import("../../src/app/beneficiary-portal/verifier/page.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

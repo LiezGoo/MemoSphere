@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Activity, BookOpen, HeartHandshake, LayoutDashboard, Orbit,
+  Activity, BookOpen, FolderOpen, HeartHandshake, LayoutDashboard, Orbit,
   PenLine, ShieldCheck, UsersRound,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -28,6 +28,7 @@ const sections: { label: string; items: NavigationItem[] }[] = [
     { label: 'Writing Modes', href: '/writing-modes', icon: PenLine },
   ] },
   { label: 'Personal management', items: [
+    { label: 'Files', href: '/files', icon: FolderOpen },
     { label: 'Beneficiaries', href: '/beneficiaries', icon: UsersRound },
     { label: 'Access Policies', href: '/legacy-policy', icon: ShieldCheck },
     { label: 'Letter of Wishes', href: '/letter-of-wishes', icon: HeartHandshake },

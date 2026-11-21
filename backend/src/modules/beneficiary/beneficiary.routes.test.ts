@@ -24,10 +24,14 @@ vi.mock('../../config/prisma.js', () => ({
   },
 }));
 
-vi.mock('../legacy/legacy-mailer.js', () => ({ legacyMailer: mailer }));
+vi.mock('../legacy/legacy-mailer.js', () => ({
+  legacyMailer: mailer,
+  MailDeliveryError: class MailDeliveryError extends Error { constructor(message: string, readonly kind: string, readonly retryAfterMs?: number, readonly status?: number) { super(message); } },
+}));
 
 import { createBeneficiaryRouter } from './beneficiary.routes.js';
 import { errorHandler } from '../../middleware/errorHandler.js';
+import { assignRequestId } from '../../middleware/requestId.js';
 import type { AuthService, SafeUser } from '../auth/auth.types.js';
 
 const user: SafeUser = { id: 'user-a', fullName: 'Owner A', email: 'owner@example.test', accountStatus: 'ACTIVE', createdAt: new Date() };
@@ -41,6 +45,7 @@ const authService: AuthService = {
 function app() {
   const server = express();
   server.use(express.json());
+  server.use(assignRequestId);
   server.use('/api/beneficiaries', createBeneficiaryRouter(authService));
   server.use(errorHandler);
   return server;
@@ -58,6 +63,7 @@ beforeEach(() => {
 
 describe('beneficiary invitation delivery', () => {
   it('creates and emails a valid beneficiary invitation', async () => {
+    const diagnosticLog = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const response = await request(app())
       .post('/api/beneficiaries')
       .set('Cookie', 'alaala_session=session-a')
@@ -70,7 +76,11 @@ describe('beneficiary invitation delivery', () => {
     expect(mailer.sendBeneficiaryInvite).toHaveBeenCalledWith(expect.objectContaining({
       email: 'mara@example.test',
       verifyUrl: expect.stringContaining('/verify-email?token='),
+      requestId: response.headers['x-request-id'],
     }));
+    const stages = diagnosticLog.mock.calls.map(([line]) => JSON.parse(String(line)).event);
+    expect(stages).toEqual(expect.arrayContaining(['invitation_request_received', 'beneficiary_invitation_record_created', 'email_sending_function_invoked']));
+    diagnosticLog.mockRestore();
   });
 
   it('rejects invalid emails', async () => {
@@ -91,7 +101,7 @@ describe('beneficiary invitation delivery', () => {
   });
 
   it('preserves the beneficiary and outbox when delivery fails', async () => {
-    mailer.sendBeneficiaryInvite.mockRejectedValue(new Error('Brevo network request failed.'));
+    mailer.sendBeneficiaryInvite.mockRejectedValue(new Error('Resend network request failed.'));
     const response = await request(app())
       .post('/api/beneficiaries')
       .set('Cookie', 'alaala_session=session-a')
@@ -101,5 +111,19 @@ describe('beneficiary invitation delivery', () => {
     expect(db.outboxUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: 'pending', attempts: 1 }),
     }));
+  });
+
+  it('does not report success when the mailer did not send an email', async () => {
+    const diagnosticError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mailer.sendBeneficiaryInvite.mockResolvedValue({ sent: false });
+    const response = await request(app())
+      .post('/api/beneficiaries')
+      .set('Cookie', 'alaala_session=session-a')
+      .send({ fullName: 'Mara Santos', email: 'mara@example.test', relationship: 'Daughter' })
+      .expect(503);
+    expect(response.body.error.message).toContain('beneficiary was saved');
+    expect(db.outboxUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'pending' }) }));
+    expect(diagnosticError).toHaveBeenCalledWith(expect.stringContaining('"errorCategory":"mail_mode_log"'));
+    diagnosticError.mockRestore();
   });
 });

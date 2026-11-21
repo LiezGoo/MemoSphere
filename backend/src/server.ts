@@ -1,11 +1,12 @@
-import 'dotenv/config';
 import { environment } from './config/environment.js';
 import { app } from './app.js';
 import { runLegacyReleaseJobs } from './modules/legacy/legacy.routes.js';
+import { validateMailConfiguration } from './modules/legacy/legacy-mailer.js';
 
 if (!environment.DATABASE_URL) {
   throw new Error('DATABASE_URL must be configured before starting the backend.');
 }
+validateMailConfiguration();
 
 const port = environment.PORT ?? environment.BACKEND_PORT;
 

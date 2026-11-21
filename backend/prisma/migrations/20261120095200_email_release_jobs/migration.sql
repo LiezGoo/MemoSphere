@@ -1,6 +1,8 @@
 ALTER TABLE `legacy_release_tokens`
   ADD COLUMN `kind` VARCHAR(20) NOT NULL DEFAULT 'release',
-  ADD COLUMN `beneficiaryId` VARCHAR(191) NULL,
+  ADD COLUMN `beneficiaryId` VARCHAR(191) NULL;
+
+ALTER TABLE `legacy_release_tokens`
   ADD INDEX `legacy_release_tokens_policyId_kind_idx` (`policyId`, `kind`);
 
 ALTER TABLE `beneficiaries`

@@ -96,9 +96,13 @@ export default function AppHeader({ sidebarCollapsed, mobileOpen, onMenuToggle }
 
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      const typing = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-      if ((event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey)) || (event.key === '/' && !typing)) {
+      if (!(event instanceof KeyboardEvent) || typeof event.key !== 'string') return;
+      const target = event.target;
+      const typing = target instanceof HTMLElement && (
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+      );
+      const key = event.key.toLowerCase();
+      if ((key === 'k' && (event.ctrlKey || event.metaKey)) || (key === '/' && !typing)) {
         event.preventDefault();
         setMobileSearchOpen(window.matchMedia('(max-width: 767px)').matches);
         inputRef.current?.focus();

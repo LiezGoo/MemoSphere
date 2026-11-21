@@ -21,5 +21,13 @@ export const errorHandler: ErrorRequestHandler = (error, request, response, next
     ? { name: error.name, message: error.message, stack: error.stack, ...diagnostic }
     : { name: typeof error, message: String(error), ...diagnostic };
   console.error(JSON.stringify({ level: 'error', requestId, route: `${request.method} ${request.originalUrl.split('?')[0]}`, error: details }));
-  response.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.', requestId } });
+  response.status(500).json({
+    success: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : 'An unexpected error occurred.',
+      requestId,
+      ...(process.env.NODE_ENV === 'development' ? { details } : {}),
+    },
+  });
 };

@@ -10,8 +10,14 @@ export const diaryListSchema = z.object({
   category: z.string().trim().max(80).optional(),
   from: dateValue.optional(),
   to: dateValue.optional(),
+  favorites: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  withPhotos: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  withAudio: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  archived: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   sort: z.enum(['newest', 'oldest', 'created-newest', 'created-oldest', 'updated-newest', 'updated-oldest']).default('newest'),
 });
+
+export const diaryFavoriteSchema = z.object({ isFavorite: z.boolean() });
 
 export const diaryCreateSchema = z.object({
   title: z.string().trim().max(200).optional().default(''),

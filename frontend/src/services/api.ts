@@ -4,7 +4,7 @@ import type { AuthUser } from '@/components/auth-provider';
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string, public readonly requestId?: string) {
+  constructor(public readonly status: number, message: string, public readonly requestId?: string, public readonly url?: string) {
     super(message);
   }
 }
@@ -38,8 +38,16 @@ export type AssistantReply = {
 };
 export type NotificationItem = { id: string; type: 'COUNTDOWN' | 'REMINDER' | 'REVISION_READY' | 'SECURITY' | 'SYSTEM'; title: string; body: string; link: string | null; isRead: boolean; readAt: string | null; createdAt: string };
 export type Profile = { id: string; fullName: string; email: string; bio: string | null; avatarUrl: string | null; timezone: string; notificationPreferences: { countdown: boolean; reminder: boolean; revision_ready: boolean; system: boolean }; createdAt: string; updatedAt: string };
+export type UserFileCategory = 'photo' | 'document' | 'credential';
+export type UserFile = { id: string; driveFileId: string; name: string; mime: string; size: string; category: UserFileCategory; createdAt: string };
+export type UserPlaylist = { id: string; kind?: 'playlist' | 'video'; youtubePlaylistId: string | null; youtubeVideoId?: string | null; startSeconds?: number | null; title: string; position: number; createdAt: string };
 export type LegacyBeneficiary = { id: string; fullName: string; email: string; relationship: string | null; status: string; verifiedAt?: string | null; createdAt?: string };
-export type LegacyPolicy = { id: string; name: string; description: string | null; status: string; beneficiaryId: string; beneficiary: LegacyBeneficiary; scopeType: string; scopeCategories: string[] | null; scopeDateFrom: string | null; scopeDateTo: string | null; excludedEntryIds: string[]; entryLinks: { entryId: string }[]; releaseMethod: string; releaseAt: string | null; coolingOffDays: number; expiresAt: string | null; releaseReadyAt: string | null };
+export type LegacyPolicyResource = { resourceType: 'FILE' | 'PLAYLIST' | 'WISHES'; resourceId: string };
+export type LegacyResourceCatalogItem = LegacyPolicyResource & { title: string; detail: string };
+export type LegacyPolicy = { id: string; name: string; description: string | null; status: string; beneficiaryId: string; beneficiary: LegacyBeneficiary; scopeType: string; scopeCategories: string[] | null; scopeDateFrom: string | null; scopeDateTo: string | null; excludedEntryIds: string[]; entryLinks: { entryId: string }[]; resources: LegacyPolicyResource[]; releaseMethod: string; releaseAt: string | null; coolingOffDays: number; expiresAt: string | null; releaseReadyAt: string | null };
+export type BeneficiaryPortalEntry = { id: string; title: string; category: string; entryDate: string; content: string; photos: { id: string; altText: string | null; thumbnailUrl: string; fullUrl: string }[]; media: { id: string; mediaType: string; fileName: string; mimeType: string; byteSize: string }[] };
+export type BeneficiaryPortalPolicy = { id: string; name: string; status: 'PENDING' | 'RELEASED'; releaseMethod: string; releaseAt: string | null; releaseReadyAt: string | null; releasedAt: string | null; entryCount: number; categories: string[]; resourceCounts: { FILE: number; PLAYLIST: number; WISHES: number } };
+export type BeneficiaryPortalOverview = { beneficiaries: { id: string; ownerName: string; relationship: string | null; acceptedAt: string | null; policies: BeneficiaryPortalPolicy[] }[] };
 
 export async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   if (!apiBaseUrl) {
@@ -49,7 +57,8 @@ export async function apiRequest<T>(path: string, options?: RequestInit): Promis
   if (!(typeof FormData !== 'undefined' && options?.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const url = `${apiBaseUrl}${path}`;
+  const response = await fetch(url, {
     ...options,
     credentials: 'include',
     headers,
@@ -62,7 +71,7 @@ export async function apiRequest<T>(path: string, options?: RequestInit): Promis
     }
     const requestId = payload?.error?.requestId;
     const message = payload?.error?.message ?? `Request failed with status ${response.status}`;
-    throw new ApiError(response.status, response.status === 500 && requestId ? `${message} Reference: ${requestId}` : message, requestId);
+    throw new ApiError(response.status, response.status === 500 && requestId ? `${message} Reference: ${requestId}` : message, requestId, url);
   }
 
   if (response.status === 204) return undefined as T;
@@ -94,12 +103,26 @@ export const diaryService = {
   create: (payload: unknown) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>('/api/diary/entries', { method: 'POST', body: JSON.stringify(payload) }).then((result) => result.data.entry),
   get: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}`, { cache: 'no-store' }).then((result) => result.data.entry),
   update: (id: string, payload: unknown) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) }).then((result) => result.data.entry),
+  setFavorite: (id: string, isFavorite: boolean) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/favorite`, { method: 'PATCH', body: JSON.stringify({ isFavorite }) }).then((result) => result.data.entry),
+  archive: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/archive`, { method: 'POST', body: '{}' }).then((result) => result.data.entry),
+  restore: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/restore`, { method: 'POST', body: '{}' }).then((result) => result.data.entry),
   remove: (id: string) => apiRequest(`/api/diary/entries/${id}`, { method: 'DELETE' }),
   photoSignature: (count: number) => apiRequest<{ success: true; data: { cloudName: string; apiKey: string; timestamp: number; folder: string; type: string; transformation: string; signature: string } }>('/api/diary/upload-signature', { method: 'POST', body: JSON.stringify({ count }) }).then((result) => result.data),
   discardPhoto: (publicId: string) => apiRequest(`/api/diary/photos/unattached`, { method: 'DELETE', body: JSON.stringify({ publicId }) }),
   setEmotion: (id: string, emotion: 'JOY' | 'SADNESS' | 'ANGER' | 'FEAR' | 'DISGUST' | 'ANXIETY') => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/emotion`, { method: 'PATCH', body: JSON.stringify({ emotion }) }).then((result) => result.data.entry),
   classifyEmotion: (id: string) => apiRequest<{ success: true; data: { entry: ApiDiaryEntry } }>(`/api/diary/entries/${id}/classify-emotion`, { method: 'POST', body: JSON.stringify({}) }).then((result) => result.data.entry),
   classifyUnclassified: () => apiRequest<{ success: true; data: { classified: number; failed: number; remaining: number } }>('/api/diary/classify-unclassified', { method: 'POST', body: '{}' }).then((result) => result.data),
+};
+
+export const filesService = {
+  list: (category?: UserFileCategory) => apiRequest<{ success: true; data: { files: UserFile[] } }>(`/api/files${category ? `?category=${encodeURIComponent(category)}` : ''}`, { cache: 'no-store' }).then((result) => result.data.files),
+  create: (metadata: Omit<UserFile, 'id' | 'createdAt' | 'size'> & { size: number }) => apiRequest<{ success: true; data: { file: UserFile } }>('/api/files', { method: 'POST', body: JSON.stringify(metadata) }).then((result) => result.data.file),
+  rename: (id: string, name: string) => apiRequest<{ success: true; data: { file: UserFile } }>(`/api/files/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }) }).then((result) => result.data.file),
+  remove: (id: string) => apiRequest<void>(`/api/files/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  listPlaylists: () => apiRequest<{ success: true; data: { playlists: UserPlaylist[] } }>('/api/files/playlists', { cache: 'no-store' }).then((result) => result.data.playlists),
+  addPlaylist: (url: string, choice: 'playlist' | 'video' = 'playlist') => apiRequest<{ success: true; data: { playlist: UserPlaylist } }>('/api/files/playlists', { method: 'POST', body: JSON.stringify({ url, choice }) }).then((result) => result.data.playlist),
+  renamePlaylist: (id: string, title: string) => apiRequest<{ success: true; data: { playlist: UserPlaylist } }>(`/api/files/playlists/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ title }) }).then((result) => result.data.playlist),
+  removePlaylist: (id: string) => apiRequest<void>(`/api/files/playlists/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 export async function uploadDiaryPhoto(file: Blob, name: string, onProgress: (progress: number) => void) {
@@ -148,8 +171,10 @@ export const policyService = {
 };
 
 export const legacyPolicyService = {
+  resourceCatalog: () => apiRequest<{ success: true; data: { resources: LegacyResourceCatalogItem[] } }>('/api/legacy/resource-catalog').then((r) => r.data.resources),
+  confirmVerifier: (token: string) => apiRequest<{ success: true; data: { releaseReadyAt: string } }>('/api/legacy/verifier/confirm', { method: 'POST', body: JSON.stringify({ token }) }).then((r) => r.data),
   listBeneficiaries: () => apiRequest<{ success: true; data: { beneficiaries: LegacyBeneficiary[] } }>('/api/legacy/beneficiaries').then((r) => r.data.beneficiaries),
-  createBeneficiary: (payload: unknown) => apiRequest<{ success: true; data: { beneficiary: LegacyBeneficiary; delivery: string } }>('/api/legacy/beneficiaries', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data),
+  createBeneficiary: (payload: unknown) => beneficiaryService.create(payload).then((result) => ({ beneficiary: result.beneficiary as LegacyBeneficiary, delivery: result.delivery })),
   resendInvitation: (id: string) => apiRequest<{ success: true; data: { delivery: string } }>(`/api/legacy/beneficiaries/${id}/invite`, { method: 'POST', body: '{}' }).then((r) => r.data),
   list: () => apiRequest<{ success: true; data: { policies: LegacyPolicy[] } }>('/api/legacy/policies').then((r) => r.data.policies),
   create: (payload: unknown) => apiRequest<{ success: true; data: { policy: LegacyPolicy } }>('/api/legacy/policies', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data.policy),
@@ -167,6 +192,19 @@ export const legacyPolicyService = {
 export const legacyVerificationService = {
   verifyInvitation: (token: string, action: 'verify' | 'decline') => apiRequest(`/api/legacy/beneficiaries/verify`, { method: 'POST', body: JSON.stringify({ token, action }) }),
   verifyRelease: (token: string) => apiRequest(`/api/legacy/release/verify`, { method: 'POST', body: JSON.stringify({ token }) }),
+};
+
+export const beneficiaryPortalService = {
+  invitation: (token: string) => apiRequest<{ success: true; data: { invitation: { fullName: string; email: string; relationship: string | null; ownerName: string; expiresAt: string | null } } }>(`/api/beneficiary-portal/invitations/${encodeURIComponent(token)}`, { cache: 'no-store' }).then((r) => r.data.invitation),
+  verifier: (token: string) => apiRequest<{ success: true; data: { verifier: { email: string; verifierName: string; ownerName: string; policyName: string; expiresAt: string } } }>(`/api/beneficiary-portal/verifiers/${encodeURIComponent(token)}`, { cache: 'no-store' }).then((r) => r.data.verifier),
+  registerAndAccept: (token: string, password: string, confirmPassword: string) => apiRequest('/api/beneficiary-portal/invitations/register', { method: 'POST', body: JSON.stringify({ token, password, confirmPassword }) }),
+  accept: (token: string) => apiRequest('/api/beneficiary-portal/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+  overview: () => apiRequest<{ success: true; data: BeneficiaryPortalOverview }>('/api/beneficiary-portal/portal', { cache: 'no-store' }).then((r) => r.data),
+  policy: (id: string, filters: { from?: string; to?: string; category?: string } = {}) => {
+    const query = new URLSearchParams(Object.entries(filters).filter((entry): entry is [string, string] => Boolean(entry[1]))).toString();
+    return apiRequest<{ success: true; data: { policy: { id: string; name: string; ownerName: string; relationship: string | null; releasedAt: string | null }; entries: BeneficiaryPortalEntry[]; resources: { playlists: { id: string; title: string; url: string }[]; letters: { id: string; title: string; content: string }[]; files: { id: string; name: string; mime: string; category: string; size: string }[] } } }>(`/api/beneficiary-portal/portal/policies/${encodeURIComponent(id)}${query ? `?${query}` : ''}`, { cache: 'no-store' }).then((r) => r.data);
+  },
+  ask: (question: string) => apiRequest<{ success: true; data: { answer: string; citations: { id: string; title: string; entryDate: string }[] } }>('/api/beneficiary-portal/portal/assistant', { method: 'POST', body: JSON.stringify({ question }) }).then((r) => r.data),
 };
 
 export const writingModeService = {

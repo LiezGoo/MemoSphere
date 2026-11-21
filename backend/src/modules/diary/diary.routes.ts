@@ -2,8 +2,8 @@ import { Router, type RequestHandler } from 'express';
 import { RequestValidationError } from '../../exceptions/index.js';
 import { authenticateUser } from '../../middleware/authenticateUser.js';
 import type { AuthService } from '../auth/auth.types.js';
-import { createDiaryEntry, deleteDiaryEntry, getDiaryEntry, listDiaryEntries, updateDiaryEntry } from './diary.service.js';
-import { diaryCreateSchema, diaryEmotionSchema, diaryListSchema, diaryUpdateSchema } from './diary.validation.js';
+import { createDiaryEntry, deleteDiaryEntry, getDiaryEntry, listDiaryEntries, setDiaryEntryArchived, setDiaryEntryFavorite, updateDiaryEntry } from './diary.service.js';
+import { diaryCreateSchema, diaryEmotionSchema, diaryFavoriteSchema, diaryListSchema, diaryUpdateSchema } from './diary.validation.js';
 import { prisma } from '../../config/prisma.js';
 import { getOwnerForUser } from '../../utils/owner.js';
 
@@ -16,6 +16,20 @@ diaryRouter.get('/entries', async (request, response, next) => {
 });
 diaryRouter.post('/entries', async (request, response, next) => {
   try { const parsed = diaryCreateSchema.safeParse(request.body); if (!parsed.success) throw new RequestValidationError(parsed.error.issues[0]?.message ?? 'Invalid diary entry.'); response.status(201).json({ success: true, data: { entry: await createDiaryEntry(request.authenticatedUserId!, parsed.data) } }); } catch (error) { next(error); }
+});
+diaryRouter.patch('/entries/:id/favorite', async (request, response, next) => {
+  try {
+    const id = request.params.id;
+    const parsed = diaryFavoriteSchema.safeParse(request.body);
+    if (typeof id !== 'string' || !parsed.success) throw new RequestValidationError('A valid favorite value and diary entry ID are required.');
+    response.json({ success: true, data: { entry: await setDiaryEntryFavorite(request.authenticatedUserId!, id, parsed.data.isFavorite) } });
+  } catch (error) { next(error); }
+});
+diaryRouter.post('/entries/:id/archive', async (request, response, next) => {
+  try { response.json({ success: true, data: { entry: await setDiaryEntryArchived(request.authenticatedUserId!, request.params.id, true) } }); } catch (error) { next(error); }
+});
+diaryRouter.post('/entries/:id/restore', async (request, response, next) => {
+  try { response.json({ success: true, data: { entry: await setDiaryEntryArchived(request.authenticatedUserId!, request.params.id, false) } }); } catch (error) { next(error); }
 });
 diaryRouter.post('/entries/:id/classify-emotion', async (request, response, next) => {
   try {

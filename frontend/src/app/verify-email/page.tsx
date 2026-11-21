@@ -10,6 +10,14 @@ export default function VerifyEmailPage() {
     const token = params.get('token');
     const purpose = params.get('purpose');
     if (!token) { setMessage('This link is invalid or expired.'); return; }
+    if (purpose === 'invitation') {
+      window.location.replace(`/beneficiary-portal/invitation?token=${encodeURIComponent(token)}`);
+      return;
+    }
+    if (purpose === 'verifier') {
+      window.location.replace(`/beneficiary-portal/verifier?token=${encodeURIComponent(token)}`);
+      return;
+    }
     const verify = purpose === 'release'
       ? legacyVerificationService.verifyRelease(token)
       : legacyVerificationService.verifyInvitation(token, purpose === 'decline' ? 'decline' : 'verify');

@@ -38,3 +38,9 @@ The backend requires a configured `DATABASE_URL` before it starts. Authenticatio
 ## Security boundary
 
 AI orchestration must use authorized backend retrieval tools. It must never receive direct database access or bypass authorization. See `SECURITY.md` and `docs/ai-design.md`.
+
+## Transactional email
+
+The backend uses Resend over HTTPS by default. Set `RESEND_API_KEY` and `MAIL_FROM` to a sender on a verified Resend domain; keep both server-side (local backend `.env` and Render environment only). `MAIL_PROVIDER` accepts `resend` (default), `brevo` for the retained compatibility provider, or `log`. `MAIL_MODE=log` keeps delivery disabled and logs a sanitized message. Do not put diary entries or other diary content in transactional email payloads.
+
+The free Resend plan's daily sending limit is 100 emails. The outbox worker prioritizes release notices, invitations, then owner warnings, pauses pending work at the daily limit, and uses the outbox idempotency key for retries.

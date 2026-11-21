@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { ApiError, authService } from '@/services/api';
 import FloatingAssistant from '@/components/floating-assistant';
+import MiniPlayer from '@/components/mini-player';
 
 export type AuthUser = { id: string; fullName: string; email: string; accountStatus: string; createdAt: string };
 type AuthContextValue = { user: AuthUser | null; isLoading: boolean };
@@ -13,18 +14,39 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    authService.me()
-      .then((result) => setUser(result.data.user))
-      .catch((error) => {
-        if (!(error instanceof ApiError) || error.status !== 401) console.error(error);
-        setUser(null);
+  let isMounted = true;
+
+  authService.me()
+    .then((result) => {
+      if (isMounted) {
+        setUser(result.data.user);
+      }
+    })
+    .catch((error) => {
+      if (!isMounted) return;
+
+      setUser(null);
+
+      if (error instanceof ApiError && error.status === 401) {
         window.location.replace('/login');
-      })
-      .finally(() => setIsLoading(false));
-  }, []);
+        return;
+      }
+
+      console.error('Session verification failed:', error);
+    })
+    .finally(() => {
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    });
+
+  return () => {
+    isMounted = false;
+  };
+}, []);
 
   if (isLoading || !user) return <div className="auth-loading" aria-live="polite">Checking your secure session...</div>;
-  return <AuthContext.Provider value={{ user, isLoading }}>{children}<FloatingAssistant /></AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, isLoading }}>{children}<FloatingAssistant userId={user.id} /><MiniPlayer /></AuthContext.Provider>;
 }
 
 export function useAuth() {

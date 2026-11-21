@@ -56,6 +56,7 @@ enum WritingMode {
 enum BeneficiaryStatus {
   INVITED
   REGISTERED
+  ACCEPTED
   VERIFIED
   SUSPENDED
   REMOVED
@@ -137,6 +138,7 @@ model User {
   faceTemplates FaceTemplate[]
   faceChallenges FaceChallenge[]
   faceAuditEvents FaceAuditEvent[]
+  beneficiaryRelationships Beneficiary[]
 
   @@index([accountStatus])
   @@map("users")
@@ -231,6 +233,8 @@ model Owner {
   auditLogs     AccessAuditLog[]
   legacyAuditLogs LegacyAuditLog[]
   lifeCountdowns LifeCountdown[]
+  files         UserFile[]
+  playlists     UserPlaylist[]
 
   @@map("owners")
 }
@@ -267,6 +271,7 @@ model DiaryEntry {
   updatedAt         DateTime          @updatedAt
   deletedAt         DateTime?
   neverShare        Boolean           @default(false)
+  isFavorite        Boolean           @default(false)
   emotion           Emotion?
   emotionConfidence Float?
   emotionReason     String? @db.VarChar(300)
@@ -282,7 +287,40 @@ model DiaryEntry {
 
   @@index([ownerId, entryDate])
   @@index([ownerId, status])
+  @@index([ownerId, isFavorite, status])
   @@map("diary_entries")
+}
+
+model UserFile {
+  id         String   @id @default(cuid())
+  ownerId    String   @map("owner_id")
+  driveFileId String  @map("drive_file_id") @db.VarChar(200)
+  name       String   @db.VarChar(255)
+  mime       String   @db.VarChar(150)
+  size       BigInt   @db.UnsignedBigInt
+  category   String   @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at")
+  owner      Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, driveFileId])
+  @@index([ownerId, category, createdAt])
+  @@map("user_files")
+}
+
+model UserPlaylist {
+  id                String   @id @default(cuid())
+  ownerId           String   @map("owner_id")
+  kind              String   @default("playlist") @db.VarChar(10)
+  youtubePlaylistId String?  @map("youtube_playlist_id") @db.VarChar(64)
+  youtubeVideoId    String?  @map("youtube_video_id") @db.Char(11)
+  startSeconds      Int?     @map("start_seconds")
+  title             String   @db.VarChar(200)
+  position          Int      @default(0)
+  createdAt         DateTime @default(now()) @map("created_at")
+  owner             Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, position, createdAt])
+  @@map("user_playlists")
 }
 
 model EntryPhoto {
@@ -364,9 +402,11 @@ model Beneficiary {
   invitationTokenHash String? @db.VarChar(64)
   invitationExpiresAt DateTime?
   invitationUsedAt DateTime?
+  userId        String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   owner         Owner             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   policies      AccessPolicy[]
   legacyPolicies LegacyPolicy[]
   grants        Grant[]
@@ -375,6 +415,7 @@ model Beneficiary {
 
   @@unique([ownerId, email])
   @@index([ownerId, status])
+  @@index([userId, status])
   @@map("beneficiaries")
 }
 
@@ -407,6 +448,7 @@ model LegacyPolicy {
   entryLinks            LegacyPolicyEntryLink[]
   auditLogs             LegacyAuditLog[]
   releaseTokens         LegacyReleaseToken[]
+  resources             LegacyPolicyResource[]
 
   @@index([ownerId, status])
   @@index([beneficiaryId])
@@ -423,6 +465,25 @@ model LegacyPolicyEntryLink {
   @@id([policyId, entryId])
   @@index([policyId])
   @@map("policy_entry_links")
+}
+
+enum LegacyResourceType {
+  FILE
+  PLAYLIST
+  WISHES
+}
+
+model LegacyPolicyResource {
+  id           String            @id @default(cuid())
+  policyId     String
+  resourceType LegacyResourceType
+  resourceId   String            @db.VarChar(191)
+  createdAt    DateTime          @default(now())
+  policy       LegacyPolicy      @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, resourceType, resourceId])
+  @@index([resourceType, resourceId])
+  @@map("legacy_policy_resources")
 }
 
 model LegacyAuditLog {

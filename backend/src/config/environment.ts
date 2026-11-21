@@ -1,10 +1,7 @@
-import { config } from 'dotenv';
-import { resolve } from 'node:path';
 import { z } from 'zod';
+import { loadEnvironmentFiles } from './loadEnvironment.js';
 
-config({ path: resolve(process.cwd(), '../.env') });
-config({ path: resolve(process.cwd(), '../.env.local'), override: false });
-config();
+loadEnvironmentFiles();
 
 if (process.env.NODE_ENV !== 'production' && process.env.LOCAL_DATABASE_URL) {
   process.env.DATABASE_URL = process.env.LOCAL_DATABASE_URL;
@@ -41,8 +38,11 @@ const environmentSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().trim().min(1).optional(),
   CLOUDINARY_API_KEY: z.string().trim().min(1).optional(),
   CLOUDINARY_API_SECRET: z.string().trim().min(1).optional(),
+  RESEND_API_KEY: z.preprocess((value) => typeof value === 'string' && value.trim() === '' ? undefined : value, z.string().trim().min(1).optional()),
+  MAIL_PROVIDER: z.enum(['resend', 'brevo', 'log']).default('resend'),
+  MAIL_FROM: z.preprocess((value) => typeof value === 'string' && value.trim() === '' ? undefined : value, z.string().trim().min(1).optional()),
   BREVO_API_KEY: z.string().trim().optional(),
-  MAIL_FROM_EMAIL: z.string().email().optional(),
+  MAIL_FROM_EMAIL: z.preprocess((value) => typeof value === 'string' && value.trim() === '' ? undefined : value, z.string().trim().email().optional()),
   MAIL_FROM_NAME: z.string().trim().default('MemoSphere'),
   APP_BASE_URL: z.string().url().optional(),
   MAIL_MODE: z.enum(['send', 'log']).default('log'),

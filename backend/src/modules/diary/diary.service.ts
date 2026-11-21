@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { EntryNotFound } from '../../exceptions/index.js';
 import { recordAudit } from '../../utils/audit.js';
@@ -27,9 +28,27 @@ function toEntry(entry: Awaited<ReturnType<typeof findEntry>>) {
 
 export async function listDiaryEntries(userId: string, input: z.infer<typeof diaryListSchema>) {
   const owner = await getOwnerForUser(userId);
-  const filter = { status: { not: 'DELETED' as const }, ...(input.search ? { OR: [{ title: { contains: input.search } }, { originalContent: { contains: input.search } }, { normalizedContent: { contains: input.search } }] } : {}), ...(input.category ? { category: input.category } : {}), ...(input.from || input.to ? { entryDate: { ...(input.from ? { gte: input.from } : {}), ...(input.to ? { lte: input.to } : {}) } } : {}) };
+  const filter: Prisma.DiaryEntryWhereInput = { status: input.archived ? 'ARCHIVED' : 'PRESERVED', ...(input.favorites ? { isFavorite: true } : {}), ...(input.withPhotos ? { photos: { some: {} } } : {}), ...(input.withAudio ? { OR: [{ inputMethod: 'VOICE' }, { media: { some: { mediaType: { in: ['AUDIO', 'VOICE_MESSAGE'] } } } }] } : {}), ...(input.search ? { AND: [{ OR: [{ title: { contains: input.search } }, { originalContent: { contains: input.search } }, { normalizedContent: { contains: input.search } }] }] } : {}), ...(input.category ? { category: input.category } : {}), ...(input.from || input.to ? { entryDate: { ...(input.from ? { gte: input.from } : {}), ...(input.to ? { lte: input.to } : {}) } } : {}) };
   const [entries, total] = await listEntries(owner.id, filter, input.page, input.pageSize, input.sort);
   return { entries: entries.map((entry) => { const content = currentEntryText(entry); return { ...entry, title: entryTitle(content, entry.photos.length), content, media: entry.media.map((media) => ({ ...media, byteSize: media.byteSize.toString() })), photos: entry.photos.map((photo) => ({ ...photo, thumbnailUrl: signedCloudinaryUrl(photo.cloudinaryPublicId, 'c_fill,w_240,h_240,q_auto,f_auto') })), preview: content.replace(/^\s+/, '').slice(0, 180), access: 'Private', mediaCount: entry.media.length, photoCount: entry.photos.length }; }), pagination: { page: input.page, pageSize: input.pageSize, total, totalPages: Math.ceil(total / input.pageSize) } };
+}
+
+export async function setDiaryEntryFavorite(userId: string, id: string, isFavorite: boolean) {
+  const owner = await getOwnerForUser(userId);
+  const existing = await findEntry(owner.id, id);
+  if (!existing) throw new EntryNotFound('Diary entry not found.');
+  await prisma.diaryEntry.updateMany({ where: { id, ownerId: owner.id, status: { not: 'DELETED' } }, data: { isFavorite } });
+  await recordAudit({ ownerId: owner.id, actorUserId: userId, action: isFavorite ? 'DIARY_ENTRY_FAVORITED' : 'DIARY_ENTRY_UNFAVORITED', resourceType: 'DIARY_ENTRY', resourceId: id, result: 'ALLOWED' });
+  return getDiaryEntry(userId, id);
+}
+
+export async function setDiaryEntryArchived(userId: string, id: string, archived: boolean) {
+  const owner = await getOwnerForUser(userId);
+  const existing = await findEntry(owner.id, id);
+  if (!existing) throw new EntryNotFound('Diary entry not found.');
+  await prisma.diaryEntry.updateMany({ where: { id, ownerId: owner.id, status: { not: 'DELETED' } }, data: { status: archived ? 'ARCHIVED' : 'PRESERVED' } });
+  await recordAudit({ ownerId: owner.id, actorUserId: userId, action: archived ? 'DIARY_ENTRY_ARCHIVED' : 'DIARY_ENTRY_RESTORED', resourceType: 'DIARY_ENTRY', resourceId: id, result: 'ALLOWED' });
+  return getDiaryEntry(userId, id);
 }
 
 export async function getDiaryEntry(userId: string, id: string) {

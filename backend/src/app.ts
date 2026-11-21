@@ -19,9 +19,11 @@ import { createSettingsRouter } from './modules/settings/settings.routes.js';
 import { createBeneficiaryRouter } from './modules/beneficiary/beneficiary.routes.js';
 import { createPolicyRouter } from './modules/policy/policy.routes.js';
 import { createLegacyRouter } from './modules/legacy/legacy.routes.js';
+import { createBeneficiaryPortalRouter } from './modules/legacy/beneficiary-portal.routes.js';
 import { createWishesRouter } from './modules/wishes/wishes.routes.js';
 import { createWritingRouter } from './modules/writing/writing.routes.js';
 import { createAIRouter } from './modules/ai/ai.routes.js';
+import { createFilesRouter } from './modules/files/files.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { assignRequestId } from './middleware/requestId.js';
 import { runLegacyJob, verifyCronSecret } from './modules/legacy/legacy-jobs.js';
@@ -60,10 +62,12 @@ export function createApp(authService = createAuthService(createAuthRepository(p
   application.use('/api/settings', createSettingsRouter(authService));
   application.use('/api/beneficiaries', createBeneficiaryRouter(authService));
   application.use('/api/policies', createPolicyRouter(authService));
+  application.use('/api/beneficiary-portal', createBeneficiaryPortalRouter(authService));
   application.use('/api/legacy', createLegacyRouter(authService));
   application.use('/api/letter-of-wishes', createWishesRouter(authService));
   application.use('/api/diary/writing-modes', createWritingRouter(authService));
   application.use('/api/ai', createAIRouter(authService));
+  application.use('/api/files', createFilesRouter(authService));
   application.post('/api/internal/jobs/run', async (request, response) => {
     if (!verifyCronSecret(request.get('x-cron-secret'))) {
       response.status(401).json({ success: false, error: { message: 'Unauthorized.' } });

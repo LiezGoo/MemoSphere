@@ -44,10 +44,13 @@ export type ApiDiaryEntry = {
   normalizedContent?: string | null;
   preview: string;
   entryDate: string;
+  createdAt?: string;
   status: string;
+  isFavorite?: boolean;
   updatedAt?: string;
   access: string;
   mediaCount: number;
+  media?: Array<{ id: string; mediaType: 'PHOTO' | 'AUDIO' | 'VIDEO' | 'MUSIC' | 'VOICE_MESSAGE'; fileName: string; byteSize: string }>;
   inputMethod?: 'TEXT' | 'VOICE';
   transcript?: string | null;
   emotion?: 'JOY' | 'SADNESS' | 'ANGER' | 'FEAR' | 'DISGUST' | 'ANXIETY' | null;

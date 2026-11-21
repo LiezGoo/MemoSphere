@@ -1,16 +1,18 @@
-import { config } from 'dotenv';
-import { resolve } from 'node:path';
-
-config({ path: resolve(process.cwd(), '../.env') });
-config({ path: resolve(process.cwd(), '../.env.local'), override: false });
-config();
+import { environment } from '../src/config/environment.js';
+import { validateMailConfiguration } from '../src/modules/legacy/legacy-mailer.js';
 
 const requiredVariables = ['DATABASE_URL'];
-const missingVariables = requiredVariables.filter((name) => !process.env[name]?.trim());
+const missingVariables = requiredVariables.filter((name) => !environment[name as keyof typeof environment]);
 
 if (missingVariables.length > 0) {
   console.error(`Missing required environment variables: ${missingVariables.join(', ')}`);
   process.exitCode = 1;
 } else {
-  console.log('Environment check passed.');
+  try {
+    validateMailConfiguration(environment);
+    console.log('Environment check passed.');
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : 'Mail provider configuration is invalid.');
+    process.exitCode = 1;
+  }
 }

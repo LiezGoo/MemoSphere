@@ -17,6 +17,13 @@ describe('diary create input method', () => {
   it('accepts updated-newest ordering for the saved-entry picker', () => {
     expect(diaryListSchema.safeParse({ sort: 'updated-newest' }).success).toBe(true);
   });
+  it('parses organization filters used by the diary library', () => {
+    const result = diaryListSchema.safeParse({ favorites: 'true', withPhotos: 'false', withAudio: 'true', archived: 'true' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toMatchObject({ favorites: true, withPhotos: false, withAudio: true, archived: true });
+    }
+  });
   it('creates an entry without title, category, or entry date fields', () => {
     const result = diaryCreateSchema.safeParse(manualEntry);
     expect(result.success).toBe(true);
