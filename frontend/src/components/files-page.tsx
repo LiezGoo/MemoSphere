@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { AlertCircle, Check, Cloud, Download, ExternalLink, File, FileImage, FileText, FolderOpen, LoaderCircle, Music2, Play, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { ApiError, filesService, type UserFile, type UserFileCategory, type UserPlaylist } from '@/services/api';
+import Modal from '@/components/modal';
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const GOOGLE_CLIENT_ID = (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '').trim();
@@ -122,22 +123,6 @@ export default function FilesPage() {
   }, [playlists]);
   useEffect(() => () => { xhrs.current.forEach((xhr) => xhr.abort()); uploadControllers.current.forEach((controller) => controller.abort()); if (tokenTimer.current) clearTimeout(tokenTimer.current); }, []);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
-
-  useEffect(() => {
-    if (!preview && !renameFile && !renamePlaylist) return;
-    const dialog = previewRef.current ?? document.querySelector<HTMLElement>('.files-modal-backdrop [role="dialog"]');
-    const previous = document.activeElement as HTMLElement | null;
-    const focusable = dialog?.querySelectorAll<HTMLElement>('button, a, input, [tabindex]:not([tabindex="-1"])');
-    focusable?.[0]?.focus();
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') { setPreview(null); setRenameFile(null); setRenamePlaylist(null); return; }
-      if (event.key !== 'Tab' || !focusable?.length) return;
-      if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable[focusable.length - 1]?.focus(); }
-      else if (!event.shiftKey && document.activeElement === focusable[focusable.length - 1]) { event.preventDefault(); focusable[0]?.focus(); }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
-  }, [preview, renameFile, renamePlaylist]);
 
   const googleJson = async <T,>(url: string, accessToken: string, init?: RequestInit, action = 'read'): Promise<T> => {
     const headers = new Headers(init?.headers);
@@ -412,8 +397,8 @@ export default function FilesPage() {
         </li>)}</ul>}
       </aside>
     </div>
-    {renameFile && <div className="files-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRenameFile(null); }}><form className="files-modal" role="dialog" aria-modal="true" aria-labelledby="rename-file-title" onSubmit={(event) => void saveFileName(event)}><button type="button" className="files-modal-close" aria-label="Close rename dialog" onClick={() => setRenameFile(null)}><X size={18} /></button><h2 id="rename-file-title">Rename file</h2><label htmlFor="rename-file-input">File name</label><input id="rename-file-input" autoFocus maxLength={255} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} required /><div><button type="button" className="files-secondary-button" onClick={() => setRenameFile(null)}>Cancel</button><button type="submit" className="files-primary-button" disabled={busyFileId === renameFile.id}>Save name</button></div></form></div>}
-    {renamePlaylist && <div className="files-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRenamePlaylist(null); }}><form className="files-modal" role="dialog" aria-modal="true" aria-labelledby="rename-playlist-title" onSubmit={(event) => void savePlaylistTitle(event)}><button type="button" className="files-modal-close" aria-label="Close rename dialog" onClick={() => setRenamePlaylist(null)}><X size={18} /></button><h2 id="rename-playlist-title">Rename playlist</h2><label htmlFor="rename-playlist-input">Playlist title</label><input id="rename-playlist-input" autoFocus maxLength={200} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} required /><div><button type="button" className="files-secondary-button" onClick={() => setRenamePlaylist(null)}>Cancel</button><button type="submit" className="files-primary-button">Save title</button></div></form></div>}
-    {preview && <div className="files-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}><div ref={previewRef} className="files-preview-modal" role="dialog" aria-modal="true" aria-label={`Preview ${preview.name}`}><header><strong>{preview.name}</strong><button type="button" aria-label="Close preview" onClick={() => setPreview(null)}><X size={20} /></button></header>{preview.type === 'application/pdf' ? <iframe title={`PDF preview: ${preview.name}`} src={preview.url} /> : <img src={preview.url} alt={preview.name} />}</div></div>}
+    {renameFile && <Modal onClose={() => setRenameFile(null)} className="files-modal" labelledBy="rename-file-title"><form onSubmit={(event) => void saveFileName(event)}><button type="button" className="files-modal-close" aria-label="Close rename dialog" onClick={() => setRenameFile(null)}><X size={18} /></button><h2 id="rename-file-title">Rename file</h2><label htmlFor="rename-file-input">File name</label><input id="rename-file-input" autoFocus maxLength={255} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} required /><div><button type="button" className="files-secondary-button" onClick={() => setRenameFile(null)}>Cancel</button><button type="submit" className="files-primary-button" disabled={busyFileId === renameFile.id}>Save name</button></div></form></Modal>}
+    {renamePlaylist && <Modal onClose={() => setRenamePlaylist(null)} className="files-modal" labelledBy="rename-playlist-title"><form onSubmit={(event) => void savePlaylistTitle(event)}><button type="button" className="files-modal-close" aria-label="Close rename dialog" onClick={() => setRenamePlaylist(null)}><X size={18} /></button><h2 id="rename-playlist-title">Rename playlist</h2><label htmlFor="rename-playlist-input">Playlist title</label><input id="rename-playlist-input" autoFocus maxLength={200} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} required /><div><button type="button" className="files-secondary-button" onClick={() => setRenamePlaylist(null)}>Cancel</button><button type="submit" className="files-primary-button">Save title</button></div></form></Modal>}
+    {preview && <Modal onClose={() => setPreview(null)} size="fluid" className="files-preview-modal" ariaLabel={`Preview ${preview.name}`} contentRef={previewRef}><header><strong>{preview.name}</strong><button type="button" aria-label="Close preview" onClick={() => setPreview(null)}><X size={20} /></button></header>{preview.type === 'application/pdf' ? <iframe title={`PDF preview: ${preview.name}`} src={preview.url} /> : <img src={preview.url} alt={preview.name} />}</Modal>}
   </section>;
 }

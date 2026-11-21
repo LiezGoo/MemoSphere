@@ -3,6 +3,7 @@
 import { Camera, LoaderCircle, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { faceAuthService, ApiError } from '@/services/api';
+import Modal from '@/components/modal';
 
 type Props = { email?: string; password?: string; purpose: 'login' | 'enroll'; onComplete: (descriptor: number[]) => void; onClose: () => void };
 let modelsLoaded: Promise<void> | null = null;
@@ -64,13 +65,11 @@ export default function FaceCapture({ email, password, purpose, onComplete, onCl
     } finally { setBusy(false); }
   };
 
-  return <div className="face-capture-backdrop" role="dialog" aria-modal="true" aria-labelledby="face-capture-title">
-    <div className="face-capture-modal">
+  return <Modal onClose={onClose} className="face-capture-modal" labelledBy="face-capture-title">
       <button className="icon-button" type="button" onClick={onClose} aria-label="Close face camera"><X size={18} /></button>
       <p className="eyebrow">Face Recognition</p><h2 id="face-capture-title">{purpose === 'login' ? 'Continue with face' : 'Set up face login'}</h2>
       <div className="face-video-frame">{error ? <div className="face-capture-error" role="alert">{error}</div> : <video ref={videoRef} muted playsInline aria-label="Face camera preview" />}</div>
       <p className="field-help" aria-live="polite">{status}</p>
       <div className="profile-actions"><button className="button button-secondary" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="button" onClick={() => { void capture(); }} disabled={busy || Boolean(error && !streamRef.current)}>{busy ? <><LoaderCircle size={16} className="spin" /> Checking…</> : <><Camera size={16} /> Capture</>}</button></div>
-    </div>
-  </div>;
+  </Modal>;
 }

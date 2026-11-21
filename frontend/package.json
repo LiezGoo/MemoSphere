@@ -5,6 +5,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "check:nav-consistency": "node scripts/check-nav-consistency.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },

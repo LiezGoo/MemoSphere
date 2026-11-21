@@ -1,23 +1,123 @@
 :root {
-  --color-bg-start: #050816;
-  --color-bg-end: #0b1030;
-  --color-primary: #5b6cff;
-  --color-secondary: #8b5cf6;
-  --color-accent: #7dd3fc;
-  --color-text: #eaf0ff;
-  --color-muted: #9aa6d1;
-  --color-subtle: #6b76a8;
-  --color-success: #34d399;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
-  --surface-glass: rgba(255, 255, 255, 0.05);
-  --surface-glass-strong: rgba(255, 255, 255, 0.09);
-  --border-glass: rgba(140, 150, 255, 0.25);
-  --border-soft: rgba(140, 150, 255, 0.14);
-  --shadow-glass: 0 18px 60px rgba(0, 0, 0, 0.24), inset 0 1px rgba(255, 255, 255, 0.08);
-  --shadow-glow: 0 0 24px rgba(91, 108, 255, 0.45);
+  /* Canonical semantic palette; page literals are inventoried for later migration. */
+  --color-bg-0: #070827;
+  --color-bg-1: #0b1030;
+  --color-bg-2: #14124a;
+
+  --color-surface-1: rgba(255, 255, 255, .05);
+  --color-surface-2: rgba(255, 255, 255, .09);
+  --color-surface-3: rgba(255, 255, 255, .12);
+  --color-border-subtle: rgba(140, 150, 255, .14);
+  --color-border-strong: rgba(140, 150, 255, .25);
+
+  --color-text-primary: #f1f3ff;
+  --color-text-secondary: #b8c0e8;
+  --color-text-muted: #9aa6d1;
+  --color-text-subtle: #6b76a8;
+  --color-text-on-accent: #ffffff;
+
+  --color-accent-start: #8b48f7;
+  --color-accent-end: #6335e8;
+  --gradient-accent: linear-gradient(110deg, var(--color-accent-start), var(--color-accent-end));
+  --color-accent-hover: color-mix(in srgb, var(--color-accent-start) 88%, white);
+  --color-accent-active: color-mix(in srgb, var(--color-accent-end) 86%, black);
+  --color-focus-ring: #7dd3fc;
+  --color-link: #64bdff;
+  --color-selection-bg: color-mix(in srgb, var(--color-accent-end) 42%, transparent);
+  --color-selection-text: #ffffff;
+
+  /* Shared header and navigation tokens, moved from the Dashboard route overrides. */
+  --nav-item-size: 46px;
+  --nav-item-gap: 19px;
+  --nav-content-gap: 12px;
+  --nav-icon-size: 21px;
+  --nav-padding-inline: 14px;
+  --nav-radius: 12px;
+  --nav-hover-bg: var(--color-surface-2);
+  --nav-icon: var(--color-text-muted);
+  --nav-icon-active: var(--color-text-on-accent);
+  --nav-active-bg: linear-gradient(110deg, rgba(133,75,255,.26), rgba(169,124,255,.25));
+  --nav-active-border: rgba(169,124,255,.25);
+  --nav-active-glow: 0 0 24px rgba(122,70,255,.25);
+  --nav-active-bar: linear-gradient(180deg, var(--color-text-on-accent), #ac6dff);
+  --nav-container-bg: rgba(11,13,49,.72);
+  --nav-container-border: rgba(154,153,255,.14);
+  --nav-container-radius: 0 22px 22px 0;
+  --nav-container-shadow: 8px 0 35px rgba(0,0,0,.16);
+  --nav-header-bg: rgba(7,9,38,.55);
+  --nav-header-border: rgba(157,157,255,.1);
+  --nav-logo-size: 36px;
+  --nav-drawer-backdrop: color-mix(in srgb, var(--color-bg-0) 58%, transparent);
+
+  --color-state-info-fg: #5b6cff;
+  --color-state-info-bg: rgba(91, 108, 255, .14);
+  --color-state-info-border: color-mix(in srgb, var(--color-state-info-fg) 30%, transparent);
+  --color-state-success-fg: #34d399;
+  --color-state-success-bg: rgba(52, 211, 153, .12);
+  --color-state-success-border: color-mix(in srgb, var(--color-state-success-fg) 28%, transparent);
+  --color-state-warning-fg: #fbbf24;
+  --color-state-warning-bg: rgba(251, 191, 36, .12);
+  --color-state-warning-border: color-mix(in srgb, var(--color-state-warning-fg) 28%, transparent);
+  --color-state-danger-fg: #f87171;
+  --color-state-danger-bg: rgba(248, 113, 113, .12);
+  --color-state-danger-border: color-mix(in srgb, var(--color-state-danger-fg) 28%, transparent);
+
+  --color-scrollbar-track: rgba(255, 255, 255, .025);
+  --color-scrollbar-thumb: rgba(181, 192, 230, .24);
+  --shadow-card: 0 18px 60px rgba(0, 0, 0, .24), inset 0 1px rgba(255, 255, 255, .08);
+  --shadow-glow: 0 0 24px rgba(91, 108, 255, .45);
+  --shadow-overlay: 0 28px 100px rgba(0, 0, 0, .55);
+
   --radius-card: 24px;
+  --radius-panel: 18px;
+  --radius-control: 12px;
   --radius-tile: 16px;
   --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
   --ease-ui: 220ms ease-out;
+
+  /* Compatibility aliases for page migration batches. */
+  --color-bg-start: var(--color-bg-0);
+  --color-bg-end: var(--color-bg-1);
+  --color-primary: var(--color-accent-start);
+  --color-secondary: var(--color-accent-end);
+  --color-accent: var(--color-focus-ring);
+  --color-text: var(--color-text-primary);
+  --color-muted: var(--color-text-muted);
+  --color-subtle: var(--color-text-subtle);
+  --color-success: var(--color-state-success-fg);
+  --color-warning: var(--color-state-warning-fg);
+  --color-danger: var(--color-state-danger-fg);
+  --surface-glass: var(--color-surface-1);
+  --surface-glass-strong: var(--color-surface-2);
+  --border-glass: var(--color-border-strong);
+  --border-soft: var(--color-border-subtle);
+  --shadow-glass: var(--shadow-card);
+}
+
+/* These accents are available only to the UI that represents them. */
+.memory-timeline-page {
+  --timeline-joy: #facc15;
+  --timeline-sadness: #38bdf8;
+  --timeline-anger: #ef4444;
+  --timeline-fear: #8b5cf6;
+  --timeline-disgust: #4ade80;
+  --timeline-anxiety: #22d3ee;
+  --timeline-unlabeled: #a5aec3;
+}
+
+.dashboard-experience {
+  --dash-gold: #ffd36a;
+  --dash-leaf: #70ef8a;
+  --dash-flame: #ff526d;
+  --dash-cloud: #41c9ff;
+  --dash-spiral: #c26bff;
+  --color-countdown-rainbow: linear-gradient(90deg, #ffd94f 0%, #8df56d 18%, #30ddcf 37%, #3a8dff 55%, #a35bff 72%, #f24cdb 86%, #ff604d 100%);
 }

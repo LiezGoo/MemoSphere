@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import '../styles/futuristic.css';
 import '../styles/files.css';
@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   icons: {
     icon: '/images/logoo.png',
   },
+};
+
+// The browser theme-color meta content must be a literal, mirrored from --color-bg-0.
+export const viewport: Viewport = {
+  themeColor: '#070827',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
